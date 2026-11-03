@@ -1,46 +1,53 @@
-import * as React from 'react';
+import React, { useState } from 'react';
 import { TextInput, Text, View, StyleSheet, TouchableHighlight } from 'react-native';
 import firebase from '../config/config';
+import jsmediatags from 'jsmediatags';
 
-class BuscarItens extends React.Component {
-  constructor(props) {
-    super(props);
-    this.marca = "";
-    this.state = { notebooks: [] }
-  }
+export default function BuscarItens() {
+  const [textoBusca, setTextoBusca] = useState("");
+  const [resultados, setResultados] = useState([]);
 
-  buscar() {
-    firebase.database().ref("notebooks")
-      .orderByChild("marca").equalTo(this.marca)
+  // Array local de músicas
+  /*
+  const musicasFiltradas = todasAsMusicas.filter(musica =>
+    musica.filename.toLowerCase().includes(textoBusca.toLowerCase())
+  );
+  */
+
+  const buscar = () => {
+    firebase.database().ref("notebooks") 
+      .orderByChild("marca").equalTo(textoBusca)
       .once('value', snapshot => {
         let data = snapshot.val();
         if (data == null) {
-          alert("Nao encontrado!")
+          alert("Não encontrado!");
+          setResultados([]);
         } else {
-          let dados = Object.values(data)
-          this.setState({ notebooks: dados })
+          let dados = Object.values(data);
+          setResultados(dados);
         }
-      })
-  }
+      });
+  };
 
-  render(){
-    return(
-      <View> 
-        <TextInput style={estilos.input} 
-          placeholder="Buscar Música"
-          onChangeText={(texto)=>{this.marca = texto}}
-        />
-        <TouchableHighlight style={estilos.botao} onPress={()=>this.buscar()}>
-          <Text style={estilos.txtBotao} >{"Buscar"}</Text>
-        </TouchableHighlight>
-        {this.state.notebooks.length > 0 ? 
-          this.state.notebooks.map( objeto => (
-            <Text>{objeto.marca} {objeto.quantidade}</Text>)) : 
-            null}
-      </View>
-    )
-    
-  }
+  return (
+    <View> 
+      <TextInput 
+        style={estilos.input} 
+        placeholder="Buscar Música"
+        value={textoBusca}
+        onChangeText={(texto) => setTextoBusca(texto)}
+      />
+      <TouchableHighlight style={estilos.botao} onPress={buscar}>
+        <Text style={estilos.txtBotao}>Buscar</Text>
+      </TouchableHighlight>
+      
+      {resultados.length > 0 ? (
+        resultados.map((objeto, index) => (
+          <Text key={index}>{objeto.marca} {objeto.quantidade}</Text>
+        ))
+      ) : null}
+    </View>
+  );
 }
 
 const estilos = StyleSheet.create({
@@ -68,5 +75,3 @@ const estilos = StyleSheet.create({
     borderRadius: 8
   }
 });
-
-export default BuscarItens;

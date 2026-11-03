@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   TextInput,
   Text,
@@ -10,11 +10,36 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AntDesign from '@expo/vector-icons/AntDesign';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import Slider from '@react-native-community/slider';
+// import Slider from '@react-native-community/slider';
+import { Slider } from '@miblanchard/react-native-slider';
+import { Audio } from 'expo-av';
+
 
 function ReproduzirItens() {
+  const [posicaoAtual, setPosicaoAtual] = useState(0);
+  const [duracaoTotal, setDuracaoTotal] = useState(0);
+  const [soundInstancia, setSoundInstancia] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [time, setTime] = useState(0)
+
+  const tocarMusica = async (uriDaMusica) => {
+    if (soundInstancia) {
+      await soundInstancia.unloadAsync();
+    }
+
+    const { sound } = await Audio.Sound.createAsync(
+      { uri: uriDaMusica },
+      { shouldPlay: true }
+    );
+
+    setSoundInstancia(sound);
+
+    sound.setOnPlaybackStatusUpdate((status) => {
+      if (status.isLoaded) {
+        setDuracaoTotal(status.durationMillis);
+        setPosicaoAtual(status.positionMillis);
+      }
+    });
+  };
 
   const alternarPlay = () => {
     const novoEstado = !isPlaying;
@@ -22,15 +47,29 @@ function ReproduzirItens() {
     console.log("Está tocando: ", novoEstado);
   };
 
+  
+  useEffect(() => {
+    return soundInstancia
+      ? () => { soundInstancia.unloadAsync(); }
+      : undefined;
+  }, [soundInstancia]);
+
   return (
     <View style={styles.container}>
       <View style = {styles.capa}>
 
       </View>
       <View style = {styles.containerSlider}>
-        <Slider style={styles.slider} minimumValue={0} maximumValue={100}
-        value={time} onValueChange={setTime}
-        minimumTrackTintColor="black" thumbTintColor="blue" />
+        <Slider style = {styles.slider}
+          value={posicaoAtual}
+          minimumValue={0}
+          maximumValue={duracaoTotal}
+          onSlidingComplete={async (valor) => {
+            if (soundInstancia) {
+              await soundInstancia.setPositionAsync(valor[0]);
+            }
+          }}
+        />
       </View>
       <View style={styles.containerControles}>
         <Pressable
@@ -72,6 +111,7 @@ function ReproduzirItens() {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#D3D3D3' },

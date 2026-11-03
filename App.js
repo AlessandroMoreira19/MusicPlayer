@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { NavigationContainer }   from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import ReproduzirItens from './components/ReproduzirItens';
-import SalvarItens from './components/SalvarItens';
+import Playlists from './components/Playlists';
 import BuscarItens from './components/BuscarItens';
 import ListarItens from './components/ListarItens';
 
@@ -15,7 +15,7 @@ class App extends React.Component {
       <NavigationContainer>
         <Navegacao.Navigator>
           <Navegacao.Screen name="Reproduzir" component={ReproduzirItens} />
-          <Navegacao.Screen name="Salvar" component={SalvarItens} />
+          <Navegacao.Screen name="Playlists" component={Playlists} />
           <Navegacao.Screen name="Buscar" component={BuscarItens} />
           <Navegacao.Screen name="Listar" component={ListarItens} />
         </Navegacao.Navigator>
@@ -23,6 +23,5 @@ class App extends React.Component {
     );
   }
 }
-
 
 export default App;
