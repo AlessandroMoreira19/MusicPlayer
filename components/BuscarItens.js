@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
 import { TextInput, Text, View, StyleSheet, TouchableHighlight } from 'react-native';
 import firebase from '../config/config';
-import jsmediatags from 'jsmediatags';
+import { obterMetadados } from '../components/ExtrairTags';
 
 export default function BuscarItens() {
   const [textoBusca, setTextoBusca] = useState("");
   const [resultados, setResultados] = useState([]);
-
-  // Array local de músicas
-  /*
-  const musicasFiltradas = todasAsMusicas.filter(musica =>
-    musica.filename.toLowerCase().includes(textoBusca.toLowerCase())
-  );
-  */
 
   const buscar = () => {
     firebase.database().ref("notebooks") 

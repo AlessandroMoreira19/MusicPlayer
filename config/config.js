@@ -1,12 +1,7 @@
-// Import the functions you need from the SDKs you need
-import firebase from "firebase";
-import 'firebase/database';
-import 'firebase/auth';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/database';
 
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyAsSpC_ct4IsHRJ2uOCKiHU41mi2l-V5mQ",
   authDomain: "musicplayer-a59b6.firebaseapp.com",
@@ -17,11 +12,8 @@ const firebaseConfig = {
   appId: "1:177499307503:web:235d0c5ed2167490538a1a"
 };
 
-// Initialize Firebase
-// const app = initializeApp(firebaseConfig);
-
 if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig)
+  firebase.initializeApp(firebaseConfig);
 }
 
-export default firebase
+export default firebase;

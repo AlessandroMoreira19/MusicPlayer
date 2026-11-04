@@ -1,23 +1,11 @@
 import React, { useState } from 'react';
 import { TextInput, Text, View, StyleSheet, TouchableHighlight } from 'react-native';
 import firebase from '../config/config';
-import jsmediatags from 'jsmediatags';
+import { obterMetadados } from '../components/ExtrairTags';
 
 export default function Playlists() {
   const [nomeMusica, setNomeMusica] = useState("");
   const [quantidade, setQuantidade] = useState("");
-
-  const extrairTags = (uriDoArquivo) => {
-    jsmediatags.read(uriDoArquivo, {
-      onSuccess: function(tag) {
-        const { title, artist, album, year, picture } = tag.tags;
-        // O 'picture' vem como um array de bytes, você precisará convertê-lo para base64 para exibir em uma <Image>
-      },
-      onError: function(error) {
-        console.log('Erro ao ler tags: ', error.type);
-      }
-    });
-  };
 
   const salvar = () => {
     firebase.database().ref('/playlists').push({
