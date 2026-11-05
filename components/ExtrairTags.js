@@ -12,27 +12,27 @@ export async function extrairTags(uri, nomeArquivoPadrao = 'Música Desconhecida
       const arrayBuffer = await response.arrayBuffer();
       uint8Array = new Uint8Array(arrayBuffer);
     } else {
-      // Lê os primeiros 256KB em Base64 para poupar RAM no dispositivo
       const base64Data = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
         position: 0,
-        length: 262144, 
+        length: 2097152, 
       });
       uint8Array = Buffer.from(base64Data, 'base64');
     }
 
     const metadata = await parseBuffer(uint8Array, 'audio/mpeg', {
-      duration: false,
+      duration: true,
       skipPostHeaders: true,
     });
 
-    const { common } = metadata;
+    const { common, format } = metadata;
 
     let capaUri = null;
     if (common.picture && common.picture.length > 0) {
       const pic = common.picture[0];
       const base64Pic = Buffer.from(pic.data).toString('base64');
-      capaUri = `data:${pic.format};base64,${base64Pic}`;
+      const mimeType = pic.format || 'image/jpeg';
+      capaUri = `data:${mimeType};base64,${base64Pic}`;
     }
 
     const nomeLimpo = nomeArquivoPadrao.replace(/\.[^/.]+$/, '');
@@ -40,8 +40,9 @@ export async function extrairTags(uri, nomeArquivoPadrao = 'Música Desconhecida
     return {
       title: common.title || nomeLimpo,
       artist: common.artist || 'Artista Desconhecido',
-      album: common.album || 'Álbum Desconhecido',
+      album: common.album || 'Sem Álbum',
       artwork: capaUri,
+      duration: format?.duration || 0,
     };
   } catch (error) {
     console.warn('Erro ao ler tags:', error);
@@ -49,8 +50,9 @@ export async function extrairTags(uri, nomeArquivoPadrao = 'Música Desconhecida
     return {
       title: nomeLimpo,
       artist: 'Artista Desconhecido',
-      album: 'Álbum Desconhecido',
+      album: 'Sem Álbum',
       artwork: null,
+      duration: 0,
     };
   }
 }
