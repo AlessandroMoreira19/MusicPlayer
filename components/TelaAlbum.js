@@ -5,10 +5,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export default function TelaAlbum({ route, navigation }) {
   const { nomeAlbum } = route.params;
-  const { musicas, tocarAgora, abrirMenuOpcoes } = useContext(MusicasContext);
+  const { musicas, tocarAgora, tocarLista, abrirMenuOpcoes, tema } = useContext(MusicasContext);
 
-  const musicasDoAlbum = musicas.filter(m => m.tags?.album === nomeAlbum);
-  const capaAlbum = musicasDoAlbum[0]?.tags?.artwork;
+  const musicasDoAlbum = musicas.filter((m) => m.tags?.album === nomeAlbum);
+  const capaAlbum = musicasDoAlbum.find((m) => m.tags?.artwork)?.tags?.artwork;
 
   const formatarTempo = (segundos) => {
     if (!segundos) return '00:00';
@@ -24,39 +24,68 @@ export default function TelaAlbum({ route, navigation }) {
 
   const renderizarItem = ({ item }) => (
     <TouchableOpacity
-      style={styles.itemContainer}
+      style={[styles.itemContainer, { backgroundColor: tema.card }]}
       onPress={() => tocarMusica(item)}
       onLongPress={() => abrirMenuOpcoes(item)}
       delayLongPress={300}
     >
-      <MaterialCommunityIcons name="play-circle" size={30} color="purple" style={{ marginRight: 15 }} />
+      {item.tags?.artwork ? (
+        <Image source={{ uri: item.tags.artwork }} style={styles.capaItem} />
+      ) : (
+        <View style={[styles.capaItem, { backgroundColor: tema.primariaClara }]}>
+          <MaterialCommunityIcons name="music-note" size={24} color={tema.primaria} />
+        </View>
+      )}
       <View style={styles.infoContainer}>
-        <Text style={styles.nomeMusica} numberOfLines={1}>
+        <Text style={[styles.nomeMusica, { color: tema.texto }]} numberOfLines={1}>
           {item.tags?.title || item.name.replace('.mp3', '')}
         </Text>
-        <Text style={styles.nomeArtista} numberOfLines={1}>
+        <Text style={[styles.nomeArtista, { color: tema.subtexto }]} numberOfLines={1}>
           {item.tags?.artist || 'Artista Desconhecido'}
         </Text>
       </View>
-      <Text style={styles.duracaoTexto}>{formatarTempo(item.tags?.duration)}</Text>
+      <Text style={[styles.duracaoTexto, { color: tema.subtexto }]}>{formatarTempo(item.tags?.duration)}</Text>
     </TouchableOpacity>
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: tema.bg }]}>
+      <View style={[styles.header, { backgroundColor: tema.card }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.botaoVoltar}>
-          <MaterialCommunityIcons name="arrow-left" size={28} color="#333" />
+          <MaterialCommunityIcons name="arrow-left" size={28} color={tema.texto} />
         </TouchableOpacity>
         {capaAlbum ? (
           <Image source={{ uri: capaAlbum }} style={styles.capa} />
         ) : (
-          <View style={[styles.capa, { backgroundColor: 'purple', justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={[styles.capa, { backgroundColor: tema.primaria, justifyContent: 'center', alignItems: 'center' }]}>
             <MaterialCommunityIcons name="album" size={60} color="white" />
           </View>
         )}
-        <Text style={styles.tituloAlbum}>{nomeAlbum}</Text>
-        <Text style={styles.quantidade}>{musicasDoAlbum.length} música(s)</Text>
+        <Text style={[styles.tituloAlbum, { color: tema.texto }]}>{nomeAlbum}</Text>
+        <Text style={[styles.quantidade, { color: tema.subtexto }]}>{musicasDoAlbum.length} música(s)</Text>
+
+        <View style={styles.botoesHeader}>
+          <TouchableOpacity
+            style={[styles.botaoPlay, { backgroundColor: tema.primaria }]}
+            onPress={() => {
+              tocarLista(musicasDoAlbum, false);
+              navigation.navigate('Reproduzir');
+            }}
+          >
+            <MaterialCommunityIcons name="play" size={20} color="#FFF" />
+            <Text style={styles.textoBotao}>Reproduzir</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.botaoPlay, { backgroundColor: tema.primariaClara }]}
+            onPress={() => {
+              tocarLista(musicasDoAlbum, true);
+              navigation.navigate('Reproduzir');
+            }}
+          >
+            <MaterialCommunityIcons name="shuffle-variant" size={20} color={tema.primaria} />
+            <Text style={[styles.textoBotao, { color: tema.primaria }]}>Aleatório</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -70,15 +99,19 @@ export default function TelaAlbum({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#D3D3D3' },
-  header: { alignItems: 'center', paddingVertical: 30, backgroundColor: '#FFF', elevation: 3, marginBottom: 15, position: 'relative' },
-  botaoVoltar: { position: 'absolute', top: 30, left: 20, zIndex: 10, padding: 5 },
-  capa: { width: 150, height: 150, borderRadius: 15, marginBottom: 15, elevation: 5 },
-  tituloAlbum: { fontSize: 22, fontWeight: 'bold', color: '#333', textAlign: 'center', paddingHorizontal: 10 },
-  quantidade: { fontSize: 14, color: '#888', marginTop: 5 },
-  itemContainer: { flexDirection: 'row', backgroundColor: '#FFF', padding: 15, borderRadius: 10, marginBottom: 10, alignItems: 'center', elevation: 2 },
+  container: { flex: 1 },
+  header: { alignItems: 'center', paddingTop: 45, paddingBottom: 20, elevation: 3, marginBottom: 15, position: 'relative' },
+  botaoVoltar: { position: 'absolute', top: 45, left: 20, zIndex: 10, padding: 5 },
+  capa: { width: 140, height: 140, borderRadius: 15, marginBottom: 12, elevation: 5 },
+  tituloAlbum: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', paddingHorizontal: 10 },
+  quantidade: { fontSize: 14, marginTop: 4 },
+  botoesHeader: { flexDirection: 'row', gap: 12, marginTop: 14 },
+  botaoPlay: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, gap: 6 },
+  textoBotao: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+  itemContainer: { flexDirection: 'row', padding: 10, borderRadius: 12, marginBottom: 10, alignItems: 'center', elevation: 2 },
+  capaItem: { width: 48, height: 48, borderRadius: 8, marginRight: 12, justifyContent: 'center', alignItems: 'center' },
   infoContainer: { flex: 1 },
-  nomeMusica: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  nomeArtista: { fontSize: 14, color: '#666', marginTop: 3 },
-  duracaoTexto: { fontSize: 13, color: '#888', fontWeight: 'bold', marginLeft: 10 }
+  nomeMusica: { fontSize: 15, fontWeight: 'bold' },
+  nomeArtista: { fontSize: 13, marginTop: 3 },
+  duracaoTexto: { fontSize: 12, fontWeight: 'bold', marginLeft: 10 },
 });
