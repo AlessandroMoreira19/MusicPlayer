@@ -1,12 +1,3 @@
-import { Buffer } from 'buffer';
-import process from 'process';
-import { TextDecoder, TextEncoder } from 'text-encoding';
-
-global.Buffer = global.Buffer || Buffer;
-global.process = global.process || process;
-global.TextDecoder = global.TextDecoder || TextDecoder;
-global.TextEncoder = global.TextEncoder || TextEncoder;
-
 import React, { useState, useEffect, createContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -151,20 +142,7 @@ export default function App() {
 
         if (musicasSalvas) {
           const listaParseada = JSON.parse(musicasSalvas);
-          const listaComCapas = await Promise.all(
-            listaParseada.map(async (item) => {
-              const chaveCapa = `capa_musica_${item.name}`;
-              const capaSalva = await AsyncStorage.getItem(chaveCapa);
-              return {
-                ...item,
-                tags: {
-                  ...item.tags,
-                  artwork: capaSalva || item.tags?.artwork || null,
-                },
-              };
-            })
-          );
-          setMusicas(listaComCapas);
+          setMusicas(listaParseada);
         }
       } catch (e) {
         console.warn('Erro ao carregar dados locais:', e);
@@ -179,25 +157,17 @@ export default function App() {
     if (!listaCarregada) return;
     async function salvarMusicasLocalmente() {
       try {
-        const listaLeve = [];
-        for (const m of musicas) {
-          if (m.tags?.artwork) {
-            try {
-              await AsyncStorage.setItem(`capa_musica_${m.name}`, m.tags.artwork);
-            } catch (eCapa) {}
-          }
-          listaLeve.push({
-            uri: m.uri,
-            name: m.name,
-            tags: {
-              title: m.tags?.title,
-              artist: m.tags?.artist,
-              album: m.tags?.album,
-              duration: m.tags?.duration,
-              artwork: null,
-            },
-          });
-        }
+        const listaLeve = musicas.map((m) => ({
+          uri: m.uri,
+          name: m.name,
+          tags: {
+            title: m.tags?.title,
+            artist: m.tags?.artist,
+            album: m.tags?.album,
+            duration: m.tags?.duration,
+            artwork: m.tags?.artwork && !m.tags.artwork.startsWith('data:') ? m.tags.artwork : null,
+          },
+        }));
         await AsyncStorage.setItem('biblioteca_musicas_local', JSON.stringify(listaLeve));
       } catch (e) {
         console.warn('Erro ao salvar lista de músicas:', e);
@@ -309,17 +279,20 @@ export default function App() {
   };
 
   const reordenarFila = (deIndex, paraIndex) => {
-    if (paraIndex < 0 || paraIndex >= fila.length || deIndex === paraIndex) return;
+    if (fila.length <= 1) return;
+    const destino = Math.max(0, Math.min(fila.length - 1, paraIndex));
+    if (deIndex === destino) return;
+
     setFila((filaAntiga) => {
       const nova = [...filaAntiga];
       const [movido] = nova.splice(deIndex, 1);
-      nova.splice(paraIndex, 0, movido);
+      nova.splice(destino, 0, movido);
 
       if (deIndex === indiceFila) {
-        setIndiceFila(paraIndex);
-      } else if (deIndex < indiceFila && paraIndex >= indiceFila) {
+        setIndiceFila(destino);
+      } else if (deIndex < indiceFila && destino >= indiceFila) {
         setIndiceFila(indiceFila - 1);
-      } else if (deIndex > indiceFila && paraIndex <= indiceFila) {
+      } else if (deIndex > indiceFila && destino <= indiceFila) {
         setIndiceFila(indiceFila + 1);
       }
       return nova;

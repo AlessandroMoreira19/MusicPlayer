@@ -24,7 +24,6 @@ export default function Cadastro({ navigation }) {
     firebase.auth().createUserWithEmailAndPassword(email, senha)
       .then(() => {
         setCarregando(false);
-        navigation.navigate('Login');
       })
       .catch((error) => {
         setCarregando(false);
