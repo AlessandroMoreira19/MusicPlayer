@@ -1,43 +1,35 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { MusicasContext } from '../App';
+import { MusicasContext, formatarTempo } from '../App';
+
+const ICONES_TIPO = {
+  musica: 'music-note',
+  album: 'album',
+  artista: 'account-music',
+};
 
 export default function BuscarItens({ navigation }) {
-  const {
-    musicas,
-    tocarAgora,
-    abrirMenuOpcoes,
-    tocarDeProximo,
-    adicionarAoFimDaFila,
-    tema,
-  } = useContext(MusicasContext);
-
+  const { musicas, tocarAgora, abrirMenuOpcoes, tocarDeProximo, adicionarAoFimDaFila, tema } = useContext(MusicasContext);
   const [textoBusca, setTextoBusca] = useState('');
   const [modoSelecao, setModoSelecao] = useState(false);
   const [selecionadas, setSelecionadas] = useState([]);
 
-  const formatarTempo = (segundos) => {
-    if (!segundos) return '';
-    const min = Math.floor(segundos / 60);
-    const seg = Math.floor(segundos % 60);
-    return `${min}:${seg < 10 ? '0' : ''}${seg}`;
-  };
-
+  // Busca unificada: retorna músicas, álbuns únicos e artistas únicos que batem com o termo
   const obterResultadosBusca = () => {
-    if (textoBusca.trim().length === 0) return [];
-    const texto = textoBusca.toLowerCase();
+    const termo = textoBusca.trim().toLowerCase();
+    if (!termo) return [];
+
     const resultados = [];
+    const albunsVistos = new Set();
+    const artistasVistos = new Set();
 
     musicas.forEach((m) => {
       const titulo = m.tags?.title || m.name.replace('.mp3', '');
       const artista = m.tags?.artist || 'Artista Desconhecido';
       const album = m.tags?.album || 'Sem Álbum';
-      if (
-        titulo.toLowerCase().includes(texto) ||
-        artista.toLowerCase().includes(texto) ||
-        album.toLowerCase().includes(texto)
-      ) {
+
+      if (titulo.toLowerCase().includes(termo) || artista.toLowerCase().includes(termo) || album.toLowerCase().includes(termo)) {
         resultados.push({
           id: `musica_${m.uri}`,
           tipo: 'musica',
@@ -47,63 +39,42 @@ export default function BuscarItens({ navigation }) {
           original: m,
         });
       }
-    });
 
-    const albunsUnicos = Array.from(
-      new Set(musicas.map((m) => m.tags?.album).filter((a) => a && a !== 'Sem Álbum'))
-    );
-    albunsUnicos.forEach((album) => {
-      if (album.toLowerCase().includes(texto)) {
-        const musicaComCapa = musicas.find((m) => m.tags?.album === album && m.tags?.artwork);
-        resultados.push({
-          id: `album_${album}`,
-          tipo: 'album',
-          nome: album,
-          extra: 'Álbum',
-          artwork: musicaComCapa?.tags?.artwork || null,
-        });
+      if (album !== 'Sem Álbum' && !albunsVistos.has(album) && album.toLowerCase().includes(termo)) {
+        albunsVistos.add(album);
+        const capa = musicas.find((x) => x.tags?.album === album && x.tags?.artwork)?.tags?.artwork || null;
+        resultados.push({ id: `album_${album}`, tipo: 'album', nome: album, extra: 'Álbum', artwork: capa });
       }
-    });
 
-    const artistasUnicos = Array.from(
-      new Set(musicas.map((m) => m.tags?.artist).filter((a) => a && a !== 'Artista Desconhecido'))
-    );
-    artistasUnicos.forEach((artista) => {
-      if (artista.toLowerCase().includes(texto)) {
-        const musicaComCapa = musicas.find((m) => m.tags?.artist === artista && m.tags?.artwork);
-        resultados.push({
-          id: `artista_${artista}`,
-          tipo: 'artista',
-          nome: artista,
-          extra: 'Artista',
-          artwork: musicaComCapa?.tags?.artwork || null,
-        });
+      if (artista !== 'Artista Desconhecido' && !artistasVistos.has(artista) && artista.toLowerCase().includes(termo)) {
+        artistasVistos.add(artista);
+        const capa = musicas.find((x) => x.tags?.artist === artista && x.tags?.artwork)?.tags?.artwork || null;
+        resultados.push({ id: `artista_${artista}`, tipo: 'artista', nome: artista, extra: 'Artista', artwork: capa });
       }
     });
 
     return resultados;
   };
 
+  const resultados = obterResultadosBusca();
+  const musicasEncontradas = resultados.filter((i) => i.tipo === 'musica').map((i) => i.original.uri);
+
   const alternarSelecao = (uri) => {
-    setSelecionadas((antigas) =>
-      antigas.includes(uri) ? antigas.filter((u) => u !== uri) : [...antigas, uri]
-    );
+    setSelecionadas((antigas) => (antigas.includes(uri) ? antigas.filter((u) => u !== uri) : [...antigas, uri]));
   };
 
   const selecionarTudoNaBusca = () => {
-    const musicasEncontradas = obterResultadosBusca().filter((i) => i.tipo === 'musica').map((i) => i.original.uri);
-    if (selecionadas.length === musicasEncontradas.length) {
-      setSelecionadas([]);
-    } else {
-      setSelecionadas(musicasEncontradas);
-    }
+    setSelecionadas(selecionadas.length === musicasEncontradas.length ? [] : musicasEncontradas);
   };
-
-  const obterObjetosSelecionados = () => musicas.filter((m) => selecionadas.includes(m.uri));
 
   const sairModoSelecao = () => {
     setModoSelecao(false);
     setSelecionadas([]);
+  };
+
+  const executarAcaoLote = (acao) => {
+    acao(musicas.filter((m) => selecionadas.includes(m.uri)));
+    sairModoSelecao();
   };
 
   const acaoAoClicar = (item) => {
@@ -121,15 +92,8 @@ export default function BuscarItens({ navigation }) {
     }
   };
 
-  const getIcone = (tipo) => {
-    if (tipo === 'musica') return 'music-note';
-    if (tipo === 'album') return 'album';
-    return 'account-music';
-  };
-
   const renderizarItem = ({ item }) => {
     const estaSelecionada = item.tipo === 'musica' && selecionadas.includes(item.original.uri);
-
     return (
       <TouchableOpacity
         style={[
@@ -154,7 +118,7 @@ export default function BuscarItens({ navigation }) {
           <Image source={{ uri: item.artwork }} style={styles.capaMiniatura} />
         ) : (
           <View style={[styles.capaMiniatura, { backgroundColor: tema.primariaClara }]}>
-            <MaterialCommunityIcons name={getIcone(item.tipo)} size={24} color={tema.primaria} />
+            <MaterialCommunityIcons name={ICONES_TIPO[item.tipo] || 'music-note'} size={24} color={tema.primaria} />
           </View>
         )}
 
@@ -168,8 +132,8 @@ export default function BuscarItens({ navigation }) {
         </View>
 
         {item.tipo === 'musica' && (
-          <Text style={{ fontSize: 12, color: tema.subtexto, fontWeight: 'bold', marginRight: 8 }}>
-            {formatarTempo(item.original?.tags?.duration)}
+          <Text style={[styles.duracaoTexto, { color: tema.subtexto }]}>
+            {formatarTempo(item.original?.tags?.duration, '')}
           </Text>
         )}
         <MaterialCommunityIcons name="chevron-right" size={24} color={tema.subtexto} />
@@ -177,12 +141,19 @@ export default function BuscarItens({ navigation }) {
     );
   };
 
-  const totalMusicasBusca = obterResultadosBusca().filter((i) => i.tipo === 'musica').length;
+  const acoesLote = [
+    { icone: 'folder-music', texto: '+ Playlist', acao: () => executarAcaoLote((itens) => abrirMenuOpcoes(itens, true)) },
+    { icone: 'playlist-play', texto: 'Tocar Próximo', acao: () => executarAcaoLote(tocarDeProximo) },
+    { icone: 'playlist-plus', texto: '+ Fim da Fila', acao: () => executarAcaoLote(adicionarAoFimDaFila) },
+  ];
 
   return (
     <View style={[styles.container, { backgroundColor: tema.bg }]}>
       <View style={styles.topoBarra}>
-        <Text style={[styles.titulo, { color: tema.primaria }]}>Buscar</Text>
+        <View style={styles.tituloContainer}>
+          <Image source={require('../assets/mascote.png')} style={styles.mascoteIcone} />
+          <Text style={[styles.titulo, { color: tema.primaria }]}>Buscar</Text>
+        </View>
         <TouchableOpacity
           style={[styles.botaoSelecionar, { backgroundColor: modoSelecao ? tema.primaria : tema.card }]}
           onPress={() => (modoSelecao ? sairModoSelecao() : setModoSelecao(true))}
@@ -215,68 +186,42 @@ export default function BuscarItens({ navigation }) {
       </View>
 
       <FlatList
-        data={obterResultadosBusca()}
+        data={resultados}
         keyExtractor={(item) => item.id}
         renderItem={renderizarItem}
         ListEmptyComponent={
           textoBusca.length > 0 ? (
-            <Text style={[styles.textoCentro, { color: tema.subtexto }]}>
-              Nenhum resultado para "{textoBusca}".
-            </Text>
+            <Text style={[styles.textoCentro, { color: tema.subtexto }]}>Nenhum resultado para "{textoBusca}".</Text>
           ) : null
         }
         contentContainerStyle={{ paddingBottom: modoSelecao ? 110 : 20 }}
         style={styles.lista}
       />
 
-      {modoSelecao && totalMusicasBusca > 0 && (
+      {modoSelecao && musicasEncontradas.length > 0 && (
         <View style={[styles.barraMultiSelecao, { backgroundColor: tema.card, borderTopColor: tema.borda }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <View style={styles.cabecalhoSelecao}>
             <Text style={[styles.contadorSelecao, { color: tema.texto }]}>
-              {selecionadas.length} de {totalMusicasBusca} música(s)
+              {selecionadas.length} de {musicasEncontradas.length} música(s)
             </Text>
             <TouchableOpacity onPress={selecionarTudoNaBusca}>
               <Text style={{ color: tema.primaria, fontWeight: 'bold' }}>
-                {selecionadas.length === totalMusicasBusca ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
+                {selecionadas.length === musicasEncontradas.length ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
               </Text>
             </TouchableOpacity>
           </View>
           <View style={styles.botoesMultiContainer}>
-            <TouchableOpacity
-              style={[styles.botaoMultiAcao, { backgroundColor: tema.primaria }]}
-              onPress={() => {
-                abrirMenuOpcoes(obterObjetosSelecionados(), true);
-                sairModoSelecao();
-              }}
-              disabled={selecionadas.length === 0}
-            >
-              <MaterialCommunityIcons name="folder-music" size={18} color="#FFF" />
-              <Text style={styles.textoMultiAcao}>+ Playlist</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.botaoMultiAcao, { backgroundColor: tema.primaria }]}
-              onPress={() => {
-                tocarDeProximo(obterObjetosSelecionados());
-                sairModoSelecao();
-              }}
-              disabled={selecionadas.length === 0}
-            >
-              <MaterialCommunityIcons name="playlist-play" size={18} color="#FFF" />
-              <Text style={styles.textoMultiAcao}>Tocar Próximo</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.botaoMultiAcao, { backgroundColor: tema.primaria }]}
-              onPress={() => {
-                adicionarAoFimDaFila(obterObjetosSelecionados());
-                sairModoSelecao();
-              }}
-              disabled={selecionadas.length === 0}
-            >
-              <MaterialCommunityIcons name="playlist-plus" size={18} color="#FFF" />
-              <Text style={styles.textoMultiAcao}>+ Fim da Fila</Text>
-            </TouchableOpacity>
+            {acoesLote.map((btn) => (
+              <TouchableOpacity
+                key={btn.texto}
+                style={[styles.botaoMultiAcao, { backgroundColor: tema.primaria }]}
+                onPress={btn.acao}
+                disabled={selecionadas.length === 0}
+              >
+                <MaterialCommunityIcons name={btn.icone} size={18} color="#FFF" />
+                <Text style={styles.textoMultiAcao}>{btn.texto}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </View>
       )}
@@ -287,6 +232,8 @@ export default function BuscarItens({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', paddingTop: 45 },
   topoBarra: { flexDirection: 'row', width: '90%', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  tituloContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  mascoteIcone: { width: 28, height: 28 },
   titulo: { fontSize: 24, fontWeight: 'bold' },
   botaoSelecionar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, elevation: 2 },
   buscaContainer: { flexDirection: 'row', width: '90%', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginBottom: 15, elevation: 3 },
@@ -297,8 +244,10 @@ const styles = StyleSheet.create({
   infoContainer: { flex: 1 },
   nomeBusca: { fontSize: 16, fontWeight: 'bold' },
   textoExtra: { fontSize: 13, marginTop: 2 },
+  duracaoTexto: { fontSize: 12, fontWeight: 'bold', marginRight: 8 },
   textoCentro: { fontSize: 15, textAlign: 'center', marginTop: 20 },
   barraMultiSelecao: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 14, borderTopWidth: 1, elevation: 10 },
+  cabecalhoSelecao: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   contadorSelecao: { fontSize: 14, fontWeight: 'bold' },
   botoesMultiContainer: { flexDirection: 'row', justifyContent: 'space-around', gap: 8 },
   botaoMultiAcao: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 8, gap: 5 },

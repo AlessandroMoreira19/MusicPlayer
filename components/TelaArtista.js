@@ -1,52 +1,19 @@
 import React, { useContext } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
-import { MusicasContext } from '../App';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { MusicasContext, formatarTempo } from '../App';
 
 export default function TelaArtista({ route, navigation }) {
-  const { nomeArtista } = route.params;
+  const { nomeArtista = '' } = route.params || {};
   const { musicas, tocarAgora, tocarLista, abrirMenuOpcoes, tema } = useContext(MusicasContext);
 
   const musicasDoArtista = musicas.filter((m) => m.tags?.artist === nomeArtista);
   const capaArtista = musicasDoArtista.find((m) => m.tags?.artwork)?.tags?.artwork;
 
-  const formatarTempo = (segundos) => {
-    if (!segundos) return '00:00';
-    const min = Math.floor(segundos / 60);
-    const seg = Math.floor(segundos % 60);
-    return `${min}:${seg < 10 ? '0' : ''}${seg}`;
-  };
-
-  const tocarMusica = (item) => {
-    tocarAgora(item, musicasDoArtista);
+  const iniciarLista = (aleatorio) => {
+    tocarLista(musicasDoArtista, aleatorio);
     navigation.navigate('Reproduzir');
   };
-
-  const renderizarItem = ({ item }) => (
-    <TouchableOpacity
-      style={[styles.itemContainer, { backgroundColor: tema.card }]}
-      onPress={() => tocarMusica(item)}
-      onLongPress={() => abrirMenuOpcoes(item)}
-      delayLongPress={300}
-    >
-      {item.tags?.artwork ? (
-        <Image source={{ uri: item.tags.artwork }} style={styles.capaItem} />
-      ) : (
-        <View style={[styles.capaItem, { backgroundColor: tema.primariaClara }]}>
-          <MaterialCommunityIcons name="music-note" size={24} color={tema.primaria} />
-        </View>
-      )}
-      <View style={styles.infoContainer}>
-        <Text style={[styles.nomeMusica, { color: tema.texto }]} numberOfLines={1}>
-          {item.tags?.title || item.name.replace('.mp3', '')}
-        </Text>
-        <Text style={[styles.nomeAlbum, { color: tema.subtexto }]} numberOfLines={1}>
-          {item.tags?.album || 'Sem Álbum'}
-        </Text>
-      </View>
-      <Text style={[styles.duracaoTexto, { color: tema.subtexto }]}>{formatarTempo(item.tags?.duration)}</Text>
-    </TouchableOpacity>
-  );
 
   return (
     <View style={[styles.container, { backgroundColor: tema.bg }]}>
@@ -54,6 +21,7 @@ export default function TelaArtista({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.botaoVoltar}>
           <MaterialCommunityIcons name="arrow-left" size={28} color={tema.texto} />
         </TouchableOpacity>
+
         {capaArtista ? (
           <Image source={{ uri: capaArtista }} style={styles.circuloArtista} />
         ) : (
@@ -61,27 +29,16 @@ export default function TelaArtista({ route, navigation }) {
             <MaterialCommunityIcons name="account-music" size={60} color="white" />
           </View>
         )}
+
         <Text style={[styles.tituloArtista, { color: tema.texto }]}>{nomeArtista}</Text>
         <Text style={[styles.quantidade, { color: tema.subtexto }]}>{musicasDoArtista.length} música(s)</Text>
 
         <View style={styles.botoesHeader}>
-          <TouchableOpacity
-            style={[styles.botaoPlay, { backgroundColor: tema.primaria }]}
-            onPress={() => {
-              tocarLista(musicasDoArtista, false);
-              navigation.navigate('Reproduzir');
-            }}
-          >
+          <TouchableOpacity style={[styles.botaoPlay, { backgroundColor: tema.primaria }]} onPress={() => iniciarLista(false)}>
             <MaterialCommunityIcons name="play" size={20} color="#FFF" />
             <Text style={styles.textoBotao}>Reproduzir</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.botaoPlay, { backgroundColor: tema.primariaClara }]}
-            onPress={() => {
-              tocarLista(musicasDoArtista, true);
-              navigation.navigate('Reproduzir');
-            }}
-          >
+          <TouchableOpacity style={[styles.botaoPlay, { backgroundColor: tema.primariaClara }]} onPress={() => iniciarLista(true)}>
             <MaterialCommunityIcons name="shuffle-variant" size={20} color={tema.primaria} />
             <Text style={[styles.textoBotao, { color: tema.primaria }]}>Aleatório</Text>
           </TouchableOpacity>
@@ -91,7 +48,34 @@ export default function TelaArtista({ route, navigation }) {
       <FlatList
         data={musicasDoArtista}
         keyExtractor={(item) => item.uri}
-        renderItem={renderizarItem}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={[styles.itemContainer, { backgroundColor: tema.card }]}
+            onPress={() => {
+              tocarAgora(item, musicasDoArtista);
+              navigation.navigate('Reproduzir');
+            }}
+            onLongPress={() => abrirMenuOpcoes(item)}
+            delayLongPress={300}
+          >
+            {item.tags?.artwork ? (
+              <Image source={{ uri: item.tags.artwork }} style={styles.capaItem} />
+            ) : (
+              <View style={[styles.capaItem, { backgroundColor: tema.primariaClara }]}>
+                <MaterialCommunityIcons name="music-note" size={24} color={tema.primaria} />
+              </View>
+            )}
+            <View style={styles.infoContainer}>
+              <Text style={[styles.nomeMusica, { color: tema.texto }]} numberOfLines={1}>
+                {item.tags?.title || item.name.replace('.mp3', '')}
+              </Text>
+              <Text style={[styles.nomeAlbum, { color: tema.subtexto }]} numberOfLines={1}>
+                {item.tags?.album || 'Sem Álbum'}
+              </Text>
+            </View>
+            <Text style={[styles.duracaoTexto, { color: tema.subtexto }]}>{formatarTempo(item.tags?.duration)}</Text>
+          </TouchableOpacity>
+        )}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
       />
     </View>

@@ -6,6 +6,7 @@ import { MusicasContext } from '../App';
 import firebase from '../config/config';
 
 export const CAPAS_PRE_SELECIONADAS = [
+  { id: 'preset_nyx', nome: 'Mascote Nyx', source: require('../assets/mascote.png') },
   { id: 'asset_icon', nome: 'Logo App', source: require('../assets/icon.png') },
   { id: 'preset_rock', nome: 'Rock / Metal', icone: 'guitar-electric', cor: '#B71C1C' },
   { id: 'preset_hiphop', nome: 'Hip-Hop / Trap', icone: 'microphone-variant', cor: '#1A237E' },
@@ -13,18 +14,20 @@ export const CAPAS_PRE_SELECIONADAS = [
   { id: 'preset_chill', nome: 'Chill / Lo-Fi', icone: 'coffee', cor: '#004D40' },
 ];
 
+// Exibe a capa da playlist por prioridade: foto da galeria -> preset -> capa da 1ª música local -> ícone padrão
 export function RenderizarCapaPlaylist({ capaInfo, musicasDaPlaylist, musicasLocais, tamanho = 54, tema }) {
+  const estiloImg = { width: tamanho, height: tamanho, borderRadius: 10 };
+
   if (capaInfo?.tipo === 'galeria' && capaInfo.uri) {
-    return <Image source={{ uri: capaInfo.uri }} style={{ width: tamanho, height: tamanho, borderRadius: 10 }} />;
+    return <Image source={{ uri: capaInfo.uri }} style={estiloImg} />;
   }
+
   if (capaInfo?.tipo === 'preset') {
     const preset = CAPAS_PRE_SELECIONADAS.find((p) => p.id === capaInfo.id);
-    if (preset?.source) {
-      return <Image source={preset.source} style={{ width: tamanho, height: tamanho, borderRadius: 10 }} />;
-    }
+    if (preset?.source) return <Image source={preset.source} style={estiloImg} />;
     if (preset) {
       return (
-        <View style={{ width: tamanho, height: tamanho, borderRadius: 10, backgroundColor: preset.cor, justifyContent: 'center', alignItems: 'center' }}>
+        <View style={[estiloImg, styles.caixaCentralizada, { backgroundColor: preset.cor }]}>
           <MaterialCommunityIcons name={preset.icone} size={tamanho * 0.55} color="#FFF" />
         </View>
       );
@@ -32,19 +35,83 @@ export function RenderizarCapaPlaylist({ capaInfo, musicasDaPlaylist, musicasLoc
   }
 
   if (musicasDaPlaylist && musicasLocais) {
-    const arrayM = Object.values(musicasDaPlaylist);
-    for (const item of arrayM) {
+    for (const item of Object.values(musicasDaPlaylist)) {
       const local = musicasLocais.find((m) => m.uri === item.uri || m.tags?.title === item.title);
-      if (local?.tags?.artwork) {
-        return <Image source={{ uri: local.tags.artwork }} style={{ width: tamanho, height: tamanho, borderRadius: 10 }} />;
-      }
+      if (local?.tags?.artwork) return <Image source={{ uri: local.tags.artwork }} style={estiloImg} />;
     }
   }
 
   return (
-    <View style={{ width: tamanho, height: tamanho, borderRadius: 10, backgroundColor: tema.primariaClara, justifyContent: 'center', alignItems: 'center' }}>
+    <View style={[estiloImg, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
       <MaterialCommunityIcons name="playlist-music" size={tamanho * 0.55} color={tema.primaria} />
     </View>
+  );
+}
+
+// Modal reutilizável para escolher capa na criação e na edição da playlist
+export function ModalEscolherCapa({ visivel, aoFechar, aoEscolherCapa, tema, titulo = 'Capa da Playlist' }) {
+  const escolherDaGaleria = async () => {
+    try {
+      const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissao.granted) {
+        Alert.alert('Permissão necessária', 'Precisamos de acesso à galeria para definir a capa.');
+        return;
+      }
+
+      const resultado = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!resultado.canceled && resultado.assets?.[0]) {
+        const asset = resultado.assets[0];
+        // Salva em Base64 comprimido para sincronizar a capa da playlist no Firebase
+        const uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        aoEscolherCapa({ tipo: 'galeria', uri });
+        aoFechar();
+      }
+    } catch (e) {}
+  };
+
+  return (
+    <Modal visible={visivel} transparent animationType="fade" onRequestClose={aoFechar}>
+      <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={aoFechar}>
+        <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
+          <Text style={[styles.modalTitulo, { color: tema.texto }]}>{titulo}</Text>
+
+          <TouchableOpacity style={[styles.botaoGaleria, { backgroundColor: tema.primaria }]} onPress={escolherDaGaleria}>
+            <MaterialCommunityIcons name="image-multiple" size={22} color="#FFF" />
+            <Text style={styles.textoGaleria}>Escolher da Galeria</Text>
+          </TouchableOpacity>
+
+          <Text style={[styles.subtituloModal, { color: tema.subtexto }]}>Ou escolha uma capa pré-selecionada:</Text>
+          <View style={styles.gradePresets}>
+            {CAPAS_PRE_SELECIONADAS.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={styles.itemPreset}
+                onPress={() => {
+                  aoEscolherCapa({ tipo: 'preset', id: p.id });
+                  aoFechar();
+                }}
+              >
+                {p.source ? (
+                  <Image source={p.source} style={styles.imgPreset} />
+                ) : (
+                  <View style={[styles.imgPreset, styles.caixaCentralizada, { backgroundColor: p.cor }]}>
+                    <MaterialCommunityIcons name={p.icone} size={28} color="#FFF" />
+                  </View>
+                )}
+                <Text style={{ fontSize: 11, color: tema.texto, marginTop: 4 }}>{p.nome}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
@@ -54,58 +121,35 @@ export default function Playlists({ navigation }) {
   const [capaEscolhida, setCapaEscolhida] = useState(null);
   const [modalCapaVisivel, setModalCapaVisivel] = useState(false);
 
-  const escolherDaGaleria = async () => {
-    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissao.granted) {
-      Alert.alert('Permissão necessária', 'Precisamos de acesso à galeria para definir a capa.');
-      return;
-    }
-
-    const resultado = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-      base64: true,
-    });
-
-    if (!resultado.canceled && resultado.assets?.[0]) {
-      const asset = resultado.assets[0];
-      const base64Uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
-      setCapaEscolhida({ tipo: 'galeria', uri: base64Uri });
-      setModalCapaVisivel(false);
-    }
-  };
-
-  const criarPlaylist = () => {
+  const criarPlaylist = async () => {
+    // Remove caracteres proibidos em chaves do Firebase Realtime Database
     const nome = novaPlaylist.trim().replace(/[.#$\[\]\/]/g, '');
-    if (nome === '' || !usuario) return;
+    if (!nome || !usuario) return;
 
-    firebase.database().ref(`users/${usuario.uid}/playlists/${nome}`).set({
-      criadaEm: Date.now(),
-      capa: capaEscolhida || null,
-    });
-    setNovaPlaylist('');
-    setCapaEscolhida(null);
+    try {
+      await firebase.database().ref(`users/${usuario.uid}/playlists/${nome}`).set({
+        criadaEm: Date.now(),
+        capa: capaEscolhida || null,
+      });
+      setNovaPlaylist('');
+      setCapaEscolhida(null);
+    } catch (e) {}
   };
-
-  const abrirPlaylist = (nome) => {
-    navigation.navigate('TelaPlaylist', { nomePlaylist: nome });
-  };
-
-  const listasDePlaylists = Object.keys(playlistsGlobais);
 
   return (
     <View style={[styles.container, { backgroundColor: tema.bg }]}>
-      <Text style={[styles.titulo, { color: tema.primaria }]}>Minhas Playlists</Text>
+      <View style={styles.tituloTopo}>
+        <Image source={require('../assets/mascote.png')} style={styles.mascoteIcone} />
+        <Text style={[styles.titulo, { color: tema.primaria }]}>Minhas Playlists</Text>
+      </View>
 
       <View style={styles.criarContainer}>
         <TouchableOpacity
           style={[styles.botaoCapaCriar, { backgroundColor: tema.card, borderColor: tema.primaria }]}
           onPress={() => setModalCapaVisivel(true)}
         >
-          {capaEscolhida?.uri ? (
-            <Image source={{ uri: capaEscolhida.uri }} style={{ width: 48, height: 48, borderRadius: 9 }} />
+          {capaEscolhida ? (
+            <RenderizarCapaPlaylist capaInfo={capaEscolhida} tamanho={48} tema={tema} />
           ) : (
             <MaterialCommunityIcons name="image-plus" size={24} color={tema.primaria} />
           )}
@@ -125,7 +169,7 @@ export default function Playlists({ navigation }) {
       </View>
 
       <FlatList
-        data={listasDePlaylists}
+        data={Object.keys(playlistsGlobais)}
         keyExtractor={(item) => item}
         renderItem={({ item }) => {
           const dadosPl = playlistsGlobais[item];
@@ -133,7 +177,7 @@ export default function Playlists({ navigation }) {
           return (
             <TouchableOpacity
               style={[styles.itemPlaylist, { backgroundColor: tema.card }]}
-              onPress={() => abrirPlaylist(item)}
+              onPress={() => navigation.navigate('TelaPlaylist', { nomePlaylist: item })}
             >
               <RenderizarCapaPlaylist
                 capaInfo={dadosPl?.capa}
@@ -158,48 +202,22 @@ export default function Playlists({ navigation }) {
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
       />
 
-      <Modal visible={modalCapaVisivel} transparent={true} animationType="fade" onRequestClose={() => setModalCapaVisivel(false)}>
-        <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={() => setModalCapaVisivel(false)}>
-          <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
-            <Text style={[styles.modalTitulo, { color: tema.texto }]}>Capa da Playlist</Text>
-
-            <TouchableOpacity style={[styles.botaoGaleria, { backgroundColor: tema.primaria }]} onPress={escolherDaGaleria}>
-              <MaterialCommunityIcons name="image-multiple" size={22} color="#FFF" />
-              <Text style={{ color: '#FFF', fontWeight: 'bold', marginLeft: 8 }}>Escolher da Galeria</Text>
-            </TouchableOpacity>
-
-            <Text style={[styles.subtituloModal, { color: tema.subtexto }]}>Ou escolha uma capa pré-selecionada:</Text>
-            <View style={styles.gradePresets}>
-              {CAPAS_PRE_SELECIONADAS.map((p) => (
-                <TouchableOpacity
-                  key={p.id}
-                  style={styles.itemPreset}
-                  onPress={() => {
-                    setCapaEscolhida({ tipo: 'preset', id: p.id });
-                    setModalCapaVisivel(false);
-                  }}
-                >
-                  {p.source ? (
-                    <Image source={p.source} style={styles.imgPreset} />
-                  ) : (
-                    <View style={[styles.imgPreset, { backgroundColor: p.cor, justifyContent: 'center', alignItems: 'center' }]}>
-                      <MaterialCommunityIcons name={p.icone} size={28} color="#FFF" />
-                    </View>
-                  )}
-                  <Text style={{ fontSize: 11, color: tema.texto, marginTop: 4 }}>{p.nome}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+      <ModalEscolherCapa
+        visivel={modalCapaVisivel}
+        aoFechar={() => setModalCapaVisivel(false)}
+        aoEscolherCapa={setCapaEscolhida}
+        tema={tema}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 45 },
-  titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  caixaCentralizada: { justifyContent: 'center', alignItems: 'center' },
+  tituloTopo: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 20 },
+  mascoteIcone: { width: 30, height: 30 },
+  titulo: { fontSize: 24, fontWeight: 'bold' },
   criarContainer: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 20, gap: 8 },
   botaoCapaCriar: { width: 50, height: 50, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, elevation: 2, overflow: 'hidden' },
   input: { flex: 1, borderRadius: 10, paddingHorizontal: 15, fontSize: 16, elevation: 2 },
@@ -212,6 +230,7 @@ const styles = StyleSheet.create({
   modalCard: { width: '90%', borderRadius: 15, padding: 20 },
   modalTitulo: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
   botaoGaleria: { flexDirection: 'row', padding: 14, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+  textoGaleria: { color: '#FFF', fontWeight: 'bold', marginLeft: 8 },
   subtituloModal: { fontSize: 13, fontWeight: 'bold', marginBottom: 10 },
   gradePresets: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
   itemPreset: { alignItems: 'center', width: '30%', marginBottom: 10 },

@@ -1,20 +1,12 @@
 import React, { useContext, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, Alert } from 'react-native';
-import { MusicasContext } from '../App';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { MusicasContext, formatarTempo } from '../App';
 import firebase from '../config/config';
-import { CAPAS_PRE_SELECIONADAS, RenderizarCapaPlaylist } from './Playlists';
-
-export const formatarTempo = (segundos) => {
-  if (!segundos) return '00:00';
-  const min = Math.floor(segundos / 60);
-  const seg = Math.floor(segundos % 60);
-  return `${min}:${seg < 10 ? '0' : ''}${seg}`;
-};
+import { RenderizarCapaPlaylist, ModalEscolherCapa } from './Playlists';
 
 export default function TelaPlaylist({ route, navigation }) {
-  const [nomeAtual, setNomeAtual] = useState(route.params.nomePlaylist);
+  const [nomeAtual, setNomeAtual] = useState(route.params?.nomePlaylist || '');
   const {
     usuario,
     playlistsGlobais,
@@ -36,9 +28,9 @@ export default function TelaPlaylist({ route, navigation }) {
 
   const dadosPlaylist = playlistsGlobais[nomeAtual] || {};
   const musicasFirebase = dadosPlaylist.musicas || {};
-  const entradasMusicas = Object.entries(musicasFirebase);
 
-  const listaProcessada = entradasMusicas.map(([firebaseKey, itemFb]) => {
+  // Vincula cada música da playlist no Firebase com o arquivo MP3 deste dispositivo
+  const listaProcessada = Object.entries(musicasFirebase).map(([firebaseKey, itemFb]) => {
     const musicaLocal = resolverMusicaLocal(itemFb);
     return {
       firebaseKey,
@@ -47,11 +39,15 @@ export default function TelaPlaylist({ route, navigation }) {
     };
   });
 
+  const disponiveis = listaProcessada.filter((m) => !m.indisponivel);
+
   const tocarMusica = (item) => {
     if (modoSelecao) {
       if (!item.indisponivel) {
         setSelecionadas((antigas) =>
-          antigas.includes(item.firebaseKey) ? antigas.filter((k) => k !== item.firebaseKey) : [...antigas, item.firebaseKey]
+          antigas.includes(item.firebaseKey)
+            ? antigas.filter((k) => k !== item.firebaseKey)
+            : [...antigas, item.firebaseKey]
         );
       }
       return;
@@ -61,18 +57,13 @@ export default function TelaPlaylist({ route, navigation }) {
       Alert.alert('Música Indisponível', 'Este arquivo de áudio não foi encontrado no armazenamento deste dispositivo.');
       return;
     }
-    const apenasDisponiveis = listaProcessada.filter((m) => !m.indisponivel);
-    tocarAgora(item, apenasDisponiveis);
+    tocarAgora(item, disponiveis);
     navigation.navigate('Reproduzir');
   };
 
   const selecionarTudoNaPlaylist = () => {
-    const disponiveisKeys = listaProcessada.filter((m) => !m.indisponivel).map((m) => m.firebaseKey);
-    if (selecionadas.length === disponiveisKeys.length) {
-      setSelecionadas([]);
-    } else {
-      setSelecionadas(disponiveisKeys);
-    }
+    const chavesDisponiveis = disponiveis.map((m) => m.firebaseKey);
+    setSelecionadas(selecionadas.length === chavesDisponiveis.length ? [] : chavesDisponiveis);
   };
 
   const removerMusicaUnica = (firebaseKey) => {
@@ -90,12 +81,14 @@ export default function TelaPlaylist({ route, navigation }) {
         {
           text: 'Remover',
           style: 'destructive',
-          onPress: () => {
-            const updates = {};
-            selecionadas.forEach((key) => {
-              updates[`users/${usuario.uid}/playlists/${nomeAtual}/musicas/${key}`] = null;
-            });
-            firebase.database().ref().update(updates);
+          onPress: async () => {
+            try {
+              const updates = {};
+              selecionadas.forEach((key) => {
+                updates[`users/${usuario.uid}/playlists/${nomeAtual}/musicas/${key}`] = null;
+              });
+              await firebase.database().ref().update(updates);
+            } catch (e) {}
             setModoSelecao(false);
             setSelecionadas([]);
           },
@@ -104,6 +97,7 @@ export default function TelaPlaylist({ route, navigation }) {
     );
   };
 
+  // O Firebase não renomeia chaves diretamente; copia os dados para o novo nó e remove o antigo
   const confirmarRenomear = async () => {
     const limpo = novoNomeInput.trim().replace(/[.#$\[\]\/]/g, '');
     if (!limpo || limpo === nomeAtual || !usuario) {
@@ -130,33 +124,9 @@ export default function TelaPlaylist({ route, navigation }) {
     navigation.goBack();
   };
 
-  const alterarCapaGaleria = async () => {
-    const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissao.granted) return;
-    const resultado = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-      base64: true,
-    });
-    if (!resultado.canceled && resultado.assets?.[0]) {
-      const asset = resultado.assets[0];
-      const base64Uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
-      firebase
-        .database()
-        .ref(`users/${usuario.uid}/playlists/${nomeAtual}/capa`)
-        .set({ tipo: 'galeria', uri: base64Uri });
-      setModalCapaVisivel(false);
-    }
-  };
-
-  const alterarCapaPreset = (idPreset) => {
-    firebase
-      .database()
-      .ref(`users/${usuario.uid}/playlists/${nomeAtual}/capa`)
-      .set({ tipo: 'preset', id: idPreset });
-    setModalCapaVisivel(false);
+  const salvarNovaCapa = (novaCapa) => {
+    if (!usuario) return;
+    firebase.database().ref(`users/${usuario.uid}/playlists/${nomeAtual}/capa`).set(novaCapa);
   };
 
   const renderizarItem = ({ item }) => {
@@ -175,9 +145,7 @@ export default function TelaPlaylist({ route, navigation }) {
           estaSelecionada && { borderColor: tema.primaria, borderWidth: 2 },
         ]}
         onPress={() => tocarMusica(item)}
-        onLongPress={() => {
-          if (!item.indisponivel && !modoSelecao) abrirMenuOpcoes(item);
-        }}
+        onLongPress={() => !item.indisponivel && !modoSelecao && abrirMenuOpcoes(item)}
         delayLongPress={300}
       >
         {modoSelecao && !item.indisponivel && (
@@ -192,7 +160,7 @@ export default function TelaPlaylist({ route, navigation }) {
         {capaUri ? (
           <Image source={{ uri: capaUri }} style={styles.capaMusica} />
         ) : (
-          <View style={[styles.capaMusica, { backgroundColor: tema.primariaClara, justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={[styles.capaMusica, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
             <MaterialCommunityIcons
               name={item.indisponivel ? 'alert-circle-outline' : 'music'}
               size={24}
@@ -205,13 +173,7 @@ export default function TelaPlaylist({ route, navigation }) {
           <Text style={[styles.nomeMusica, { color: tema.texto }]} numberOfLines={1}>
             {titulo}
           </Text>
-          <Text
-            style={[
-              styles.nomeArtista,
-              { color: item.indisponivel ? '#FF6B6B' : tema.subtexto },
-            ]}
-            numberOfLines={1}
-          >
+          <Text style={[styles.nomeArtista, { color: item.indisponivel ? '#FF6B6B' : tema.subtexto }]} numberOfLines={1}>
             {item.indisponivel ? 'Música Indisponível neste dispositivo' : artista}
           </Text>
         </View>
@@ -227,8 +189,6 @@ export default function TelaPlaylist({ route, navigation }) {
       </TouchableOpacity>
     );
   };
-
-  const disponiveisCount = listaProcessada.filter((m) => !m.indisponivel).length;
 
   return (
     <View style={[styles.container, { backgroundColor: tema.bg }]}>
@@ -250,47 +210,40 @@ export default function TelaPlaylist({ route, navigation }) {
         />
 
         <Text style={[styles.tituloHeader, { color: tema.texto }]}>{nomeAtual}</Text>
-        <Text style={[styles.quantidade, { color: tema.subtexto }]}>
-          {listaProcessada.length} música(s)
-        </Text>
+        <Text style={[styles.quantidade, { color: tema.subtexto }]}>{listaProcessada.length} música(s)</Text>
 
-        <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-          {disponiveisCount > 0 && (
-            <>
-              <TouchableOpacity
-                style={[styles.botaoAcaoHeader, { backgroundColor: tema.primaria }]}
-                onPress={() => {
-                  tocarLista(listaProcessada, false);
-                  navigation.navigate('Reproduzir');
-                }}
-              >
-                <MaterialCommunityIcons name="play" size={20} color="#FFF" />
-                <Text style={styles.textoBotaoHeader}>Tocar</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.botaoAcaoHeader, { backgroundColor: tema.primariaClara }]}
-                onPress={() => {
-                  tocarLista(listaProcessada, true);
-                  navigation.navigate('Reproduzir');
-                }}
-              >
-                <MaterialCommunityIcons name="shuffle-variant" size={20} color={tema.primaria} />
-                <Text style={[styles.textoBotaoHeader, { color: tema.primaria }]}>Aleatório</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {disponiveisCount > 0 && (
+        {disponiveis.length > 0 && (
+          <View style={styles.botoesPlayHeader}>
             <TouchableOpacity
-              style={[styles.botaoAcaoHeader, { backgroundColor: modoSelecao ? tema.primaria : tema.card, borderWidth: 1, borderColor: tema.primaria }]}
+              style={[styles.botaoAcaoHeader, { backgroundColor: tema.primaria }]}
               onPress={() => {
-                if (modoSelecao) {
-                  setModoSelecao(false);
-                  setSelecionadas([]);
-                } else {
-                  setModoSelecao(true);
-                }
+                tocarLista(listaProcessada, false);
+                navigation.navigate('Reproduzir');
+              }}
+            >
+              <MaterialCommunityIcons name="play" size={20} color="#FFF" />
+              <Text style={[styles.textoBotaoHeader, { color: '#FFF' }]}>Tocar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.botaoAcaoHeader, { backgroundColor: tema.primariaClara }]}
+              onPress={() => {
+                tocarLista(listaProcessada, true);
+                navigation.navigate('Reproduzir');
+              }}
+            >
+              <MaterialCommunityIcons name="shuffle-variant" size={20} color={tema.primaria} />
+              <Text style={[styles.textoBotaoHeader, { color: tema.primaria }]}>Aleatório</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.botaoAcaoHeader,
+                { backgroundColor: modoSelecao ? tema.primaria : tema.card, borderWidth: 1, borderColor: tema.primaria },
+              ]}
+              onPress={() => {
+                setModoSelecao(!modoSelecao);
+                if (modoSelecao) setSelecionadas([]);
               }}
             >
               <MaterialCommunityIcons name="checkbox-multiple-marked-outline" size={18} color={modoSelecao ? '#FFF' : tema.primaria} />
@@ -298,8 +251,8 @@ export default function TelaPlaylist({ route, navigation }) {
                 {modoSelecao ? 'Cancelar' : 'Selecionar'}
               </Text>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
       </View>
 
       <FlatList
@@ -307,22 +260,20 @@ export default function TelaPlaylist({ route, navigation }) {
         keyExtractor={(item) => item.firebaseKey}
         renderItem={renderizarItem}
         ListEmptyComponent={
-          <Text style={[styles.vazioText, { color: tema.subtexto }]}>
-            Esta playlist ainda não tem músicas.
-          </Text>
+          <Text style={[styles.vazioText, { color: tema.subtexto }]}>Esta playlist ainda não tem músicas.</Text>
         }
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: modoSelecao ? 90 : 20 }}
       />
 
       {modoSelecao && (
         <View style={[styles.barraMultiSelecao, { backgroundColor: tema.card, borderTopColor: tema.borda }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <View style={styles.cabecalhoSelecao}>
             <Text style={[styles.contadorSelecao, { color: tema.texto }]}>
-              {selecionadas.length} de {disponiveisCount} selecionada(s)
+              {selecionadas.length} de {disponiveis.length} selecionada(s)
             </Text>
             <TouchableOpacity onPress={selecionarTudoNaPlaylist}>
               <Text style={{ color: tema.primaria, fontWeight: 'bold' }}>
-                {selecionadas.length === disponiveisCount ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
+                {selecionadas.length === disponiveis.length ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -337,45 +288,50 @@ export default function TelaPlaylist({ route, navigation }) {
         </View>
       )}
 
-      {/* MODAL 3 PONTOS */}
-      <Modal visible={menu3PontosVisivel} transparent={true} animationType="fade" onRequestClose={() => setMenu3PontosVisivel(false)}>
+      <Modal visible={menu3PontosVisivel} transparent animationType="fade" onRequestClose={() => setMenu3PontosVisivel(false)}>
         <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={() => setMenu3PontosVisivel(false)}>
           <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
             <Text style={[styles.modalTitulo, { color: tema.texto }]}>Opções de "{nomeAtual}"</Text>
-
-            <TouchableOpacity
-              style={[styles.opcaoItem, { borderBottomColor: tema.borda }]}
-              onPress={() => {
-                setMenu3PontosVisivel(false);
-                setNovoNomeInput(nomeAtual);
-                setModalRenomearVisivel(true);
-              }}
-            >
-              <MaterialCommunityIcons name="pencil-outline" size={24} color={tema.primaria} />
-              <Text style={[styles.opcaoTexto, { color: tema.texto }]}>Renomear Playlist</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.opcaoItem, { borderBottomColor: tema.borda }]}
-              onPress={() => {
-                setMenu3PontosVisivel(false);
-                setModalCapaVisivel(true);
-              }}
-            >
-              <MaterialCommunityIcons name="image-edit-outline" size={24} color={tema.primaria} />
-              <Text style={[styles.opcaoTexto, { color: tema.texto }]}>Alterar Imagem da Capa</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.opcaoItem, { borderBottomColor: tema.borda }]} onPress={apagarPlaylistInteira}>
-              <MaterialCommunityIcons name="trash-can-outline" size={24} color="#FF6B6B" />
-              <Text style={[styles.opcaoTexto, { color: '#FF6B6B' }]}>Apagar Playlist</Text>
-            </TouchableOpacity>
+            {[
+              {
+                icone: 'pencil-outline',
+                texto: 'Renomear Playlist',
+                cor: tema.primaria,
+                corTexto: tema.texto,
+                acao: () => {
+                  setMenu3PontosVisivel(false);
+                  setNovoNomeInput(nomeAtual);
+                  setModalRenomearVisivel(true);
+                },
+              },
+              {
+                icone: 'image-edit-outline',
+                texto: 'Alterar Imagem da Capa',
+                cor: tema.primaria,
+                corTexto: tema.texto,
+                acao: () => {
+                  setMenu3PontosVisivel(false);
+                  setModalCapaVisivel(true);
+                },
+              },
+              {
+                icone: 'trash-can-outline',
+                texto: 'Apagar Playlist',
+                cor: '#FF6B6B',
+                corTexto: '#FF6B6B',
+                acao: apagarPlaylistInteira,
+              },
+            ].map((op) => (
+              <TouchableOpacity key={op.texto} style={[styles.opcaoItem, { borderBottomColor: tema.borda }]} onPress={op.acao}>
+                <MaterialCommunityIcons name={op.icone} size={24} color={op.cor} />
+                <Text style={[styles.opcaoTexto, { color: op.corTexto }]}>{op.texto}</Text>
+              </TouchableOpacity>
+            ))}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL RENOMEAR */}
-      <Modal visible={modalRenomearVisivel} transparent={true} animationType="fade" onRequestClose={() => setModalRenomearVisivel(false)}>
+      <Modal visible={modalRenomearVisivel} transparent animationType="fade" onRequestClose={() => setModalRenomearVisivel(false)}>
         <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={() => setModalRenomearVisivel(false)}>
           <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
             <Text style={[styles.modalTitulo, { color: tema.texto }]}>Renomear Playlist</Text>
@@ -392,43 +348,26 @@ export default function TelaPlaylist({ route, navigation }) {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL ALTERAR CAPA */}
-      <Modal visible={modalCapaVisivel} transparent={true} animationType="fade" onRequestClose={() => setModalCapaVisivel(false)}>
-        <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={() => setModalCapaVisivel(false)}>
-          <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
-            <Text style={[styles.modalTitulo, { color: tema.texto }]}>Alterar Capa</Text>
-            <TouchableOpacity style={[styles.botaoSalvarNome, { backgroundColor: tema.primaria, marginBottom: 15 }]} onPress={alterarCapaGaleria}>
-              <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Escolher da Galeria</Text>
-            </TouchableOpacity>
-            <View style={styles.gradePresets}>
-              {CAPAS_PRE_SELECIONADAS.map((p) => (
-                <TouchableOpacity key={p.id} style={styles.itemPreset} onPress={() => alterarCapaPreset(p.id)}>
-                  {p.source ? (
-                    <Image source={p.source} style={styles.imgPreset} />
-                  ) : (
-                    <View style={[styles.imgPreset, { backgroundColor: p.cor, justifyContent: 'center', alignItems: 'center' }]}>
-                      <MaterialCommunityIcons name={p.icone} size={28} color="#FFF" />
-                    </View>
-                  )}
-                  <Text style={{ fontSize: 11, color: tema.texto, marginTop: 4 }}>{p.nome}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+      <ModalEscolherCapa
+        visivel={modalCapaVisivel}
+        aoFechar={() => setModalCapaVisivel(false)}
+        aoEscolherCapa={salvarNovaCapa}
+        tema={tema}
+        titulo="Alterar Capa"
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  caixaCentralizada: { justifyContent: 'center', alignItems: 'center' },
   header: { alignItems: 'center', paddingTop: 45, paddingBottom: 15, elevation: 3, marginBottom: 15, position: 'relative' },
   botaoVoltar: { position: 'absolute', top: 45, left: 20, zIndex: 10, padding: 5 },
   botao3Pontos: { position: 'absolute', top: 45, right: 20, zIndex: 10, padding: 5 },
   tituloHeader: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', paddingHorizontal: 10, marginTop: 10 },
   quantidade: { fontSize: 13, marginTop: 2 },
-  botoesPlayHeader: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  botoesPlayHeader: { flexDirection: 'row', gap: 10, marginTop: 10 },
   botaoAcaoHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, gap: 4, elevation: 2 },
   textoBotaoHeader: { fontWeight: 'bold', fontSize: 13 },
   itemContainer: { flexDirection: 'row', padding: 10, borderRadius: 12, marginBottom: 10, alignItems: 'center', elevation: 2 },
@@ -440,6 +379,7 @@ const styles = StyleSheet.create({
   textoTempo: { fontSize: 12, fontWeight: 'bold' },
   vazioText: { textAlign: 'center', marginTop: 20, fontSize: 15 },
   barraMultiSelecao: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 14, borderTopWidth: 1, elevation: 10 },
+  cabecalhoSelecao: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   contadorSelecao: { fontSize: 13, fontWeight: 'bold' },
   botaoApagarLote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 8 },
   modalFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
@@ -449,7 +389,4 @@ const styles = StyleSheet.create({
   opcaoTexto: { fontSize: 16, fontWeight: '500' },
   inputRenomear: { borderWidth: 1.5, borderRadius: 10, padding: 12, fontSize: 16, marginBottom: 15 },
   botaoSalvarNome: { padding: 14, borderRadius: 10, alignItems: 'center' },
-  gradePresets: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
-  itemPreset: { alignItems: 'center', width: '30%', marginBottom: 10 },
-  imgPreset: { width: 60, height: 60, borderRadius: 12 },
 });

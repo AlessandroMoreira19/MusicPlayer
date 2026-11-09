@@ -5,27 +5,31 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { extrairTags } from './ExtrairTags';
-import { MusicasContext } from '../App';
+import { MusicasContext, formatarTempo } from '../App';
+
+const ALTURA_LINHA_FILA = 64;
 
 function ItemFilaArrastavel({ item, index, tocandoAgora, tema, onSelect, onRemove, onReorder }) {
   const [deslocamentoY, setDeslocamentoY] = useState(0);
   const [arrastando, setArrastando] = useState(false);
 
+  // Guarda valores atuais em ref para o PanResponder não usar referências antigas
+  const dadosRef = useRef({ index, onReorder });
+  dadosRef.current = { index, onReorder };
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        setArrastando(true);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        setDeslocamentoY(gestureState.dy);
-      },
+      onPanResponderGrant: () => setArrastando(true),
+      onPanResponderMove: (_, gestureState) => setDeslocamentoY(gestureState.dy),
       onPanResponderRelease: (_, gestureState) => {
-        const linhasMovidas = Math.round(gestureState.dy / 64);
+        // Divide a distância arrastada pela altura fixa do item (64px) para achar a nova posição
+        const linhasMovidas = Math.round(gestureState.dy / ALTURA_LINHA_FILA);
         setDeslocamentoY(0);
         setArrastando(false);
         if (linhasMovidas !== 0) {
-          onReorder(index, index + linhasMovidas);
+          const { index: idxAtual, onReorder: reordenar } = dadosRef.current;
+          reordenar(idxAtual, idxAtual + linhasMovidas);
         }
       },
       onPanResponderTerminate: () => {
@@ -51,7 +55,7 @@ function ItemFilaArrastavel({ item, index, tocandoAgora, tema, onSelect, onRemov
         {item.tags?.artwork ? (
           <Image source={{ uri: item.tags.artwork }} style={styles.capaFila} />
         ) : (
-          <View style={[styles.capaFila, { backgroundColor: tema.primariaClara, justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={[styles.capaFila, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
             <MaterialCommunityIcons name="music-note" size={20} color={tema.primaria} />
           </View>
         )}
@@ -104,50 +108,52 @@ export default function ReproduzirItens() {
   const player = useAudioPlayer(source);
   const status = useAudioPlayerStatus(player);
 
+  // Permite fechar a gaveta da fila arrastando a barra superior para baixo
   const gavetaPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onPanResponderRelease: (_, gestureState) => {
-        if (gestureState.dy > 50) {
-          setModalFilaVisivel(false);
-        }
+        if (gestureState.dy > 50) setModalFilaVisivel(false);
       },
     })
   ).current;
 
+  // Permite reproduzir som mesmo quando a chave física do aparelho está no silencioso
   useEffect(() => {
     setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
   }, []);
 
   useEffect(() => {
     async function carregarMetadados() {
-      if (musicaAtual?.uri) {
-        if (musicaAtual.tags?.artwork && musicaAtual.tags?.artist !== 'Artista Desconhecido') {
-          setNomeMusica(musicaAtual.tags.title);
-          setNomeArtista(musicaAtual.tags.artist);
-          setNomeAlbum(musicaAtual.tags.album || 'Sem Álbum');
-          setCapaAlbum(musicaAtual.tags.artwork);
-        } else {
-          const tags = await extrairTags(musicaAtual.uri, musicaAtual.name);
-          setNomeMusica(tags.title);
-          setNomeArtista(tags.artist);
-          setNomeAlbum(tags.album);
-          setCapaAlbum(tags.artwork);
-
-          setMusicas((antigas) =>
-            antigas.map((m) => (m.uri === musicaAtual.uri ? { ...m, tags: { ...m.tags, ...tags } } : m))
-          );
-        }
-      } else {
+      if (!musicaAtual?.uri) {
         setNomeMusica('Nenhuma música na fila');
         setNomeArtista('Selecione uma faixa para ouvir');
         setNomeAlbum('');
         setCapaAlbum(null);
+        return;
+      }
+
+      if (musicaAtual.tags?.artwork && musicaAtual.tags?.artist !== 'Artista Desconhecido') {
+        setNomeMusica(musicaAtual.tags.title);
+        setNomeArtista(musicaAtual.tags.artist);
+        setNomeAlbum(musicaAtual.tags.album || 'Sem Álbum');
+        setCapaAlbum(musicaAtual.tags.artwork);
+      } else {
+        const tags = await extrairTags(musicaAtual.uri, musicaAtual.name);
+        setNomeMusica(tags.title);
+        setNomeArtista(tags.artist);
+        setNomeAlbum(tags.album);
+        setCapaAlbum(tags.artwork);
+
+        setMusicas((antigas) =>
+          antigas.map((m) => (m.uri === musicaAtual.uri ? { ...m, tags: { ...m.tags, ...tags } } : m))
+        );
       }
     }
     carregarMetadados();
-  }, [musicaAtual?.uri]);
+  }, [musicaAtual?.uri, musicaAtual?.tags?.artwork]);
 
+  // Atualiza a duração estimada pela duração exata lida pelo player de áudio
   useEffect(() => {
     if (musicaAtual?.uri && status.duration > 0) {
       setMusicas((antigas) =>
@@ -172,20 +178,20 @@ export default function ReproduzirItens() {
     else player.play();
   };
 
+  // Salva a reprodução concluída no armazenamento local para futura sincronização com o Firebase
   const guardarEstatisticaLocal = async () => {
     try {
-      const novaEstatistica = {
+      const statsAnteriores = await AsyncStorage.getItem('estatisticas_pendentes');
+      const arrayStats = statsAnteriores ? JSON.parse(statsAnteriores) : [];
+      arrayStats.push({
         titulo: nomeMusica || 'Desconhecida',
         artista: nomeArtista || 'Desconhecido',
         album: nomeAlbum || 'Sem Álbum',
         duracao: status.duration || 0,
         data: new Date().toISOString(),
-      };
-      const statsAnteriores = await AsyncStorage.getItem('estatisticas_pendentes');
-      const arrayStats = statsAnteriores ? JSON.parse(statsAnteriores) : [];
-      arrayStats.push(novaEstatistica);
+      });
       await AsyncStorage.setItem('estatisticas_pendentes', JSON.stringify(arrayStats));
-    } catch (error) {}
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -195,15 +201,15 @@ export default function ReproduzirItens() {
     }
   }, [status.didJustFinish]);
 
-  const formatarTempo = (segundos) => {
-    if (!segundos) return '00:00';
-    const min = Math.floor(segundos / 60);
-    const seg = Math.floor(segundos % 60);
-    return `${min}:${seg < 10 ? '0' : ''}${seg}`;
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: tema.bg }]}>
+      <View style={[styles.mascoteTopo, { backgroundColor: tema.card }]}>
+        <Image
+          source={status.playing ? require('../assets/mascote_som.png') : require('../assets/mascote.png')}
+          style={styles.mascoteImg}
+        />
+      </View>
+
       {musicaAtual && (
         <TouchableOpacity
           style={[styles.botaoOpcoes, { backgroundColor: tema.card }]}
@@ -262,11 +268,7 @@ export default function ReproduzirItens() {
         </Pressable>
 
         <Pressable
-          style={({ pressed }) => [
-            styles.pause,
-            { backgroundColor: tema.primaria },
-            pressed && styles.botaoPressionado,
-          ]}
+          style={({ pressed }) => [styles.pause, { backgroundColor: tema.primaria }, pressed && styles.botaoPressionado]}
           onPress={alternarPlayPause}
         >
           <MaterialCommunityIcons name={status.playing ? 'pause' : 'play'} size={34} color="white" />
@@ -291,23 +293,12 @@ export default function ReproduzirItens() {
         onPress={() => setModalFilaVisivel(true)}
       >
         <MaterialCommunityIcons name="playlist-music-outline" size={22} color={tema.primaria} />
-        <Text style={[styles.textoVerFila, { color: tema.primaria }]}>
-          Fila de Reprodução ({fila.length})
-        </Text>
+        <Text style={[styles.textoVerFila, { color: tema.primaria }]}>Fila de Reprodução ({fila.length})</Text>
       </TouchableOpacity>
 
-      {/* MODAL DA FILA ARRASTÁVEL E SEM BOTÃO DE FECHAR (FECHA AO CLICAR FORA OU ARRASTAR PARA BAIXO) */}
-      <Modal
-        visible={modalFilaVisivel}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setModalFilaVisivel(false)}
-      >
+      <Modal visible={modalFilaVisivel} transparent animationType="slide" onRequestClose={() => setModalFilaVisivel(false)}>
         <Pressable style={styles.modalFundo} onPress={() => setModalFilaVisivel(false)}>
-          <Pressable
-            style={[styles.modalCard, { backgroundColor: tema.card }]}
-            onPress={(e) => e.stopPropagation()}
-          >
+          <Pressable style={[styles.modalCard, { backgroundColor: tema.card }]} onPress={(e) => e.stopPropagation()}>
             <View {...gavetaPanResponder.panHandlers} style={styles.alcaGavetaContainer}>
               <View style={[styles.barraArrasteTopo, { backgroundColor: tema.subtexto }]} />
               <Text style={[styles.modalTitulo, { color: tema.texto }]}>Fila de Reprodução</Text>
@@ -331,9 +322,7 @@ export default function ReproduzirItens() {
                 />
               )}
               ListEmptyComponent={
-                <Text style={{ textAlign: 'center', marginVertical: 30, color: tema.subtexto }}>
-                  A fila está vazia.
-                </Text>
+                <Text style={{ textAlign: 'center', marginVertical: 30, color: tema.subtexto }}>A fila está vazia.</Text>
               }
             />
           </Pressable>
@@ -345,6 +334,9 @@ export default function ReproduzirItens() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  caixaCentralizada: { justifyContent: 'center', alignItems: 'center' },
+  mascoteTopo: { position: 'absolute', top: 46, left: 22, zIndex: 10, padding: 4, borderRadius: 22, elevation: 3 },
+  mascoteImg: { width: 34, height: 34 },
   botaoOpcoes: { position: 'absolute', top: 50, right: 25, zIndex: 10, padding: 8, borderRadius: 20, elevation: 3 },
   capa: { alignItems: 'center', justifyContent: 'center', width: 270, height: 270, borderRadius: 35, overflow: 'hidden', marginBottom: 20, elevation: 6 },
   imagemCapa: { width: '100%', height: '100%' },
@@ -366,7 +358,7 @@ const styles = StyleSheet.create({
   alcaGavetaContainer: { alignItems: 'center', paddingVertical: 14 },
   barraArrasteTopo: { width: 45, height: 5, borderRadius: 3, marginBottom: 10, opacity: 0.5 },
   modalTitulo: { fontSize: 18, fontWeight: 'bold' },
-  filaItem: { flexDirection: 'row', alignItems: 'center', height: 64, borderBottomWidth: 1, borderRadius: 8, paddingHorizontal: 4 },
+  filaItem: { flexDirection: 'row', alignItems: 'center', height: ALTURA_LINHA_FILA, borderBottomWidth: 1, borderRadius: 8, paddingHorizontal: 4 },
   alcaArrastarItem: { paddingHorizontal: 8, justifyContent: 'center', height: '100%' },
   filaConteudoClicavel: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   capaFila: { width: 42, height: 42, borderRadius: 6 },

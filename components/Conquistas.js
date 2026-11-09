@@ -1,8 +1,30 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { MusicasContext } from '../App';
 import firebase from '../config/config';
+
+function SecaoRanking({ titulo, itens, iconeDestaque, corDestaque, tema }) {
+  return (
+    <>
+      <Text style={[styles.subtitulo, { color: tema.texto }]}>{titulo}</Text>
+      <View style={[styles.cardLista, { backgroundColor: tema.card }]}>
+        {itens.map((item, index) => (
+          <View key={index} style={[styles.itemLista, { borderBottomColor: tema.borda }]}>
+            <Text style={[styles.posicao, { color: tema.primaria }]}>{index + 1}º</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.nomeItem, { color: tema.texto }]} numberOfLines={1}>
+                {item.nome}
+              </Text>
+              <Text style={[styles.detalheItem, { color: tema.subtexto }]}>{item.detalhe}</Text>
+            </View>
+            {index === 0 && <MaterialCommunityIcons name={iconeDestaque} size={24} color={corDestaque} />}
+          </View>
+        ))}
+      </View>
+    </>
+  );
+}
 
 export default function Conquistas() {
   const { usuario, tema } = useContext(MusicasContext);
@@ -39,21 +61,35 @@ export default function Conquistas() {
     );
   }
 
-  const musicasArray = dados.musicas ? Object.values(dados.musicas) : [];
-  const topMusicas = musicasArray.sort((a, b) => b.reproducoes - a.reproducoes).slice(0, 5);
+  const topMusicas = Object.values(dados.musicas || {})
+    .sort((a, b) => b.reproducoes - a.reproducoes)
+    .slice(0, 5)
+    .map((m) => ({ nome: m.titulo, detalhe: `${m.artista} • ${m.reproducoes} reproduções` }));
 
-  const artistasArray = dados.artistas ? Object.entries(dados.artistas).map(([nome, info]) => ({ nome, ...info })) : [];
-  const topArtistas = artistasArray.sort((a, b) => b.reproducoes - a.reproducoes).slice(0, 5);
+  const topArtistas = Object.entries(dados.artistas || {})
+    .map(([nome, info]) => ({ nome, ...info }))
+    .sort((a, b) => b.reproducoes - a.reproducoes)
+    .slice(0, 5)
+    .map((a) => ({ nome: a.nome, detalhe: `${a.reproducoes} reproduções` }));
 
-  const albunsArray = dados.albuns ? Object.entries(dados.albuns).map(([nome, info]) => ({ nome, ...info })) : [];
-  const topAlbuns = albunsArray.sort((a, b) => b.reproducoes - a.reproducoes).slice(0, 5);
+  const topAlbuns = Object.entries(dados.albuns || {})
+    .map(([nome, info]) => ({ nome, ...info }))
+    .sort((a, b) => b.reproducoes - a.reproducoes)
+    .slice(0, 5)
+    .map((al) => ({ nome: al.nome, detalhe: `${al.reproducoes} reproduções` }));
 
-  const tempoTotalSegundos = dados.tempoMensal ? Object.values(dados.tempoMensal).reduce((acc, curr) => acc + curr, 0) : 0;
+  const tempoTotalSegundos = Object.values(dados.tempoMensal || {}).reduce((acc, s) => acc + s, 0);
   const tempoTotalHoras = (tempoTotalSegundos / 3600).toFixed(1);
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: tema.bg }]} contentContainerStyle={{ paddingBottom: 40, paddingTop: 45 }}>
-      <Text style={[styles.titulo, { color: tema.primaria }]}>Conquistas e Estatísticas</Text>
+    <ScrollView
+      style={[styles.container, { backgroundColor: tema.bg }]}
+      contentContainerStyle={{ paddingBottom: 40, paddingTop: 45 }}
+    >
+      <View style={styles.tituloTopo}>
+        <Image source={require('../assets/mascote.png')} style={styles.mascoteIcone} />
+        <Text style={[styles.titulo, { color: tema.primaria }]}>Conquistas e Estatísticas</Text>
+      </View>
 
       <View style={[styles.cardDestaque, { backgroundColor: tema.primaria }]}>
         <View style={styles.circuloIcone}>
@@ -65,47 +101,9 @@ export default function Conquistas() {
         </View>
       </View>
 
-      <Text style={[styles.subtitulo, { color: tema.texto }]}>Top 5 Músicas</Text>
-      <View style={[styles.cardLista, { backgroundColor: tema.card }]}>
-        {topMusicas.map((musica, index) => (
-          <View key={index} style={[styles.itemLista, { borderBottomColor: tema.borda }]}>
-            <Text style={[styles.posicao, { color: tema.primaria }]}>{index + 1}º</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.nomeItem, { color: tema.texto }]} numberOfLines={1}>{musica.titulo}</Text>
-              <Text style={[styles.detalheItem, { color: tema.subtexto }]}>{musica.artista} • {musica.reproducoes} reproduções</Text>
-            </View>
-            {index === 0 && <MaterialCommunityIcons name="star-circle" size={24} color="#1DB954" />}
-          </View>
-        ))}
-      </View>
-
-      <Text style={[styles.subtitulo, { color: tema.texto }]}>Top 5 Artistas</Text>
-      <View style={[styles.cardLista, { backgroundColor: tema.card }]}>
-        {topArtistas.map((artista, index) => (
-          <View key={index} style={[styles.itemLista, { borderBottomColor: tema.borda }]}>
-            <Text style={[styles.posicao, { color: tema.primaria }]}>{index + 1}º</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.nomeItem, { color: tema.texto }]} numberOfLines={1}>{artista.nome}</Text>
-              <Text style={[styles.detalheItem, { color: tema.subtexto }]}>{artista.reproducoes} reproduções</Text>
-            </View>
-            {index === 0 && <MaterialCommunityIcons name="crown" size={24} color="#FFD700" />}
-          </View>
-        ))}
-      </View>
-
-      <Text style={[styles.subtitulo, { color: tema.texto }]}>Top 5 Álbuns</Text>
-      <View style={[styles.cardLista, { backgroundColor: tema.card }]}>
-        {topAlbuns.map((album, index) => (
-          <View key={index} style={[styles.itemLista, { borderBottomColor: tema.borda }]}>
-            <Text style={[styles.posicao, { color: tema.primaria }]}>{index + 1}º</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.nomeItem, { color: tema.texto }]} numberOfLines={1}>{album.nome}</Text>
-              <Text style={[styles.detalheItem, { color: tema.subtexto }]}>{album.reproducoes} reproduções</Text>
-            </View>
-            {index === 0 && <MaterialCommunityIcons name="disc" size={24} color="#C0C0C0" />}
-          </View>
-        ))}
-      </View>
+      <SecaoRanking titulo="Top 5 Músicas" itens={topMusicas} iconeDestaque="star-circle" corDestaque="#1DB954" tema={tema} />
+      <SecaoRanking titulo="Top 5 Artistas" itens={topArtistas} iconeDestaque="crown" corDestaque="#FFD700" tema={tema} />
+      <SecaoRanking titulo="Top 5 Álbuns" itens={topAlbuns} iconeDestaque="disc" corDestaque="#C0C0C0" tema={tema} />
     </ScrollView>
   );
 }
@@ -113,7 +111,9 @@ export default function Conquistas() {
 const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: 16 },
   centro: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  titulo: { fontSize: 26, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  tituloTopo: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 20 },
+  mascoteIcone: { width: 32, height: 32 },
+  titulo: { fontSize: 26, fontWeight: 'bold', textAlign: 'center' },
   subtitulo: { fontSize: 19, fontWeight: 'bold', marginTop: 22, marginBottom: 10, marginLeft: 5 },
   cardDestaque: { flexDirection: 'row', padding: 20, borderRadius: 15, alignItems: 'center', elevation: 4 },
   circuloIcone: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 15, borderRadius: 30, marginRight: 15 },

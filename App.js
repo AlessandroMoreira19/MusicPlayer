@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext } from 'react';
+import React, { useState, useEffect, useContext, createContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -29,6 +29,14 @@ export const PALETAS_CORES = [
   { nome: 'Rosa Neon', cor: '#D81B60', clara: '#fce4ec' },
 ];
 
+// Formata segundos para "M:SS" em todas as telas do app
+export const formatarTempo = (segundos, padrao = '00:00') => {
+  if (!segundos) return padrao;
+  const min = Math.floor(segundos / 60);
+  const seg = Math.floor(segundos % 60);
+  return `${min}:${seg < 10 ? '0' : ''}${seg}`;
+};
+
 const NavegacaoTabs = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 const BuscarStack = createNativeStackNavigator();
@@ -54,27 +62,25 @@ function PlaylistsNavegacao() {
 }
 
 function AppTabs() {
-  const { tema } = React.useContext(MusicasContext);
+  const { tema } = useContext(MusicasContext);
+  const icones = {
+    Reproduzir: 'play-circle',
+    Playlists: 'playlist-music',
+    Listar: 'music-box-multiple',
+    Conquistas: 'trophy',
+    Buscar: 'magnify',
+  };
+
   return (
     <NavegacaoTabs.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: tema.primaria,
         tabBarInactiveTintColor: tema.subtexto,
-        tabBarStyle: {
-          backgroundColor: tema.card,
-          borderTopColor: tema.borda,
-        },
-        tabBarIcon: ({ color, size }) => {
-          const icones = {
-            Reproduzir: 'play-circle',
-            Playlists: 'playlist-music',
-            Listar: 'music-box-multiple',
-            Conquistas: 'trophy',
-            Buscar: 'magnify',
-          };
-          return <MaterialCommunityIcons name={icones[route.name] || 'music'} size={size} color={color} />;
-        },
+        tabBarStyle: { backgroundColor: tema.card, borderTopColor: tema.borda },
+        tabBarIcon: ({ color, size }) => (
+          <MaterialCommunityIcons name={icones[route.name] || 'music'} size={size} color={color} />
+        ),
       })}
     >
       <NavegacaoTabs.Screen name="Reproduzir" component={ReproduzirItens} />
@@ -117,17 +123,17 @@ export default function App() {
 
   const musicaAtual = indiceFila >= 0 && indiceFila < fila.length ? fila[indiceFila] : null;
 
+  // Remove da fila músicas que foram apagadas da biblioteca local
   useEffect(() => {
     if (fila.length === 0) return;
     const novaFila = fila.filter((m) => musicas.some((lib) => lib.uri === m.uri));
     if (novaFila.length !== fila.length) {
       setFila(novaFila);
-      if (indiceFila >= novaFila.length) {
-        setIndiceFila(novaFila.length - 1);
-      }
+      if (indiceFila >= novaFila.length) setIndiceFila(novaFila.length - 1);
     }
   }, [musicas]);
 
+  // Carrega biblioteca e preferências visuais em paralelo ao iniciar
   useEffect(() => {
     async function carregarDadosLocais() {
       try {
@@ -136,14 +142,9 @@ export default function App() {
           AsyncStorage.getItem('preferencia_tema_escuro'),
           AsyncStorage.getItem('preferencia_cor_primaria'),
         ]);
-
         if (temaSalvo !== null) setTemaEscuro(JSON.parse(temaSalvo));
-        if (corSalva) setCorPrimaria(corSalva);
-
-        if (musicasSalvas) {
-          const listaParseada = JSON.parse(musicasSalvas);
-          setMusicas(listaParseada);
-        }
+        if (corSalva !== null) setCorPrimaria(corSalva);
+        if (musicasSalvas !== null) setMusicas(JSON.parse(musicasSalvas));
       } catch (e) {
         console.warn('Erro ao carregar dados locais:', e);
       } finally {
@@ -153,6 +154,7 @@ export default function App() {
     carregarDadosLocais();
   }, []);
 
+  // Persiste a lista local (omite capas em Base64 para não exceder o limite do AsyncStorage)
   useEffect(() => {
     if (!listaCarregada) return;
     async function salvarMusicasLocalmente() {
@@ -178,23 +180,29 @@ export default function App() {
 
   const alternarTemaEscuro = async (valor) => {
     setTemaEscuro(valor);
-    await AsyncStorage.setItem('preferencia_tema_escuro', JSON.stringify(valor));
+    try {
+      await AsyncStorage.setItem('preferencia_tema_escuro', JSON.stringify(valor));
+    } catch (e) {}
   };
 
   const escolherCorPrimaria = async (cor) => {
     setCorPrimaria(cor);
-    await AsyncStorage.setItem('preferencia_cor_primaria', cor);
+    try {
+      await AsyncStorage.setItem('preferencia_cor_primaria', cor);
+    } catch (e) {}
   };
 
+  // Cruza metadados da nuvem (Firebase) com o arquivo MP3 físico presente neste aparelho
   const resolverMusicaLocal = (item) => {
     if (!item) return null;
-    const encontrada = musicas.find(
-      (m) =>
-        m.uri === item.uri ||
-        (m.tags?.title && item.title && m.tags.title.toLowerCase() === item.title.toLowerCase()) ||
-        (m.name && item.name && m.name.toLowerCase() === item.name.toLowerCase())
+    return (
+      musicas.find(
+        (m) =>
+          m.uri === item.uri ||
+          (m.tags?.title && item.title && m.tags.title.toLowerCase() === item.title.toLowerCase()) ||
+          (m.name && item.name && m.name.toLowerCase() === item.name.toLowerCase())
+      ) || null
     );
-    return encontrada || null;
   };
 
   const formatarItemParaFila = (item) => {
@@ -217,30 +225,29 @@ export default function App() {
   const tocarAgora = (item, novaLista = null) => {
     const musicaFormatada = formatarItemParaFila(item);
 
-    if (novaLista && Array.isArray(novaLista)) {
+    if (Array.isArray(novaLista)) {
       const filaFormatada = novaLista.map(formatarItemParaFila);
-      setFila(filaFormatada);
       const idx = filaFormatada.findIndex((m) => m.uri === musicaFormatada.uri);
+      setFila(filaFormatada);
       setIndiceFila(idx !== -1 ? idx : 0);
+      return;
+    }
+
+    const idxExistente = fila.findIndex((m) => m.uri === musicaFormatada.uri);
+    if (idxExistente !== -1) {
+      setIndiceFila(idxExistente);
     } else {
-      setFila((filaAntiga) => {
-        const idxExistente = filaAntiga.findIndex((m) => m.uri === musicaFormatada.uri);
-        if (idxExistente !== -1) {
-          setIndiceFila(idxExistente);
-          return filaAntiga;
-        }
-        const nova = [...filaAntiga, musicaFormatada];
-        setIndiceFila(nova.length - 1);
-        return nova;
-      });
+      const novaFila = [...fila, musicaFormatada];
+      setFila(novaFila);
+      setIndiceFila(novaFila.length - 1);
     }
   };
 
   const tocarLista = (listaItens, aleatorio = false) => {
-    const disponiveis = listaItens.map(formatarItemParaFila).filter((m) => !m.indisponivel);
-    if (disponiveis.length === 0) return;
+    const filaFinal = listaItens.map(formatarItemParaFila).filter((m) => !m.indisponivel);
+    if (filaFinal.length === 0) return;
 
-    let filaFinal = [...disponiveis];
+    // Embaralhamento Fisher-Yates para modo aleatório
     if (aleatorio) {
       for (let i = filaFinal.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -251,30 +258,28 @@ export default function App() {
     setIndiceFila(0);
   };
 
-  const tocarDeProximo = (itens) => {
-    const arrayItens = Array.isArray(itens) ? itens : [itens];
-    const formatados = arrayItens.map(formatarItemParaFila);
+  const fecharMenuOpcoes = () => {
+    setMusicasMenu([]);
+    setExibirEscolherPlaylist(false);
+  };
 
-    setFila((filaAntiga) => {
-      if (filaAntiga.length === 0) {
-        setIndiceFila(0);
-        return formatados;
-      }
-      const nova = [...filaAntiga];
-      nova.splice(indiceFila + 1, 0, ...formatados);
-      return nova;
-    });
+  const tocarDeProximo = (itens) => {
+    const formatados = (Array.isArray(itens) ? itens : [itens]).map(formatarItemParaFila);
+    if (fila.length === 0) {
+      setFila(formatados);
+      setIndiceFila(0);
+    } else {
+      const novaFila = [...fila];
+      novaFila.splice(indiceFila + 1, 0, ...formatados);
+      setFila(novaFila);
+    }
     fecharMenuOpcoes();
   };
 
   const adicionarAoFimDaFila = (itens) => {
-    const arrayItens = Array.isArray(itens) ? itens : [itens];
-    const formatados = arrayItens.map(formatarItemParaFila);
-
-    setFila((filaAntiga) => {
-      if (filaAntiga.length === 0) setIndiceFila(0);
-      return [...filaAntiga, ...formatados];
-    });
+    const formatados = (Array.isArray(itens) ? itens : [itens]).map(formatarItemParaFila);
+    if (fila.length === 0) setIndiceFila(0);
+    setFila([...fila, ...formatados]);
     fecharMenuOpcoes();
   };
 
@@ -283,20 +288,15 @@ export default function App() {
     const destino = Math.max(0, Math.min(fila.length - 1, paraIndex));
     if (deIndex === destino) return;
 
-    setFila((filaAntiga) => {
-      const nova = [...filaAntiga];
-      const [movido] = nova.splice(deIndex, 1);
-      nova.splice(destino, 0, movido);
+    const novaFila = [...fila];
+    const [movido] = novaFila.splice(deIndex, 1);
+    novaFila.splice(destino, 0, movido);
+    setFila(novaFila);
 
-      if (deIndex === indiceFila) {
-        setIndiceFila(destino);
-      } else if (deIndex < indiceFila && destino >= indiceFila) {
-        setIndiceFila(indiceFila - 1);
-      } else if (deIndex > indiceFila && destino <= indiceFila) {
-        setIndiceFila(indiceFila + 1);
-      }
-      return nova;
-    });
+    // Ajusta o índice para não trocar a música que já está tocando
+    if (deIndex === indiceFila) setIndiceFila(destino);
+    else if (deIndex < indiceFila && destino >= indiceFila) setIndiceFila(indiceFila - 1);
+    else if (deIndex > indiceFila && destino <= indiceFila) setIndiceFila(indiceFila + 1);
   };
 
   const avancarMusica = () => {
@@ -308,26 +308,15 @@ export default function App() {
   };
 
   const removerDaFila = (indexParaRemover) => {
-    setFila((filaAntiga) => {
-      const nova = filaAntiga.filter((_, idx) => idx !== indexParaRemover);
-      if (indexParaRemover < indiceFila) {
-        setIndiceFila((prev) => prev - 1);
-      } else if (indexParaRemover === indiceFila && indiceFila >= nova.length) {
-        setIndiceFila(nova.length - 1);
-      }
-      return nova;
-    });
+    const novaFila = fila.filter((_, idx) => idx !== indexParaRemover);
+    setFila(novaFila);
+    if (indexParaRemover < indiceFila) setIndiceFila(indiceFila - 1);
+    else if (indexParaRemover === indiceFila && indiceFila >= novaFila.length) setIndiceFila(novaFila.length - 1);
   };
 
   const abrirMenuOpcoes = (itemOuArray, irDiretoParaPlaylist = false) => {
-    const lista = Array.isArray(itemOuArray) ? itemOuArray : [itemOuArray];
-    setMusicasMenu(lista);
+    setMusicasMenu(Array.isArray(itemOuArray) ? itemOuArray : [itemOuArray]);
     setExibirEscolherPlaylist(irDiretoParaPlaylist);
-  };
-
-  const fecharMenuOpcoes = () => {
-    setMusicasMenu([]);
-    setExibirEscolherPlaylist(false);
   };
 
   const salvarMusicasNaPlaylist = (nomePlaylist) => {
@@ -335,19 +324,19 @@ export default function App() {
     const refMusicas = firebase.database().ref(`users/${usuario.uid}/playlists/${nomePlaylist}/musicas`);
 
     musicasMenu.forEach((item) => {
-      const novaMusica = {
+      refMusicas.push({
         uri: item.uri,
         name: item.name || item.title || 'Música.mp3',
         title: item.tags?.title || item.title || item.name?.replace('.mp3', ''),
         artist: item.tags?.artist || item.artist || 'Artista Desconhecido',
         album: item.tags?.album || item.album || 'Sem Álbum',
         duration: item.tags?.duration || item.duration || 0,
-      };
-      refMusicas.push(novaMusica);
+      });
     });
     fecharMenuOpcoes();
   };
 
+  // Envia em lote ao Firebase as estatísticas de reprodução salvas enquanto o app rodava offline
   const sincronizarEstatisticas = async (uid) => {
     try {
       const statsGuardados = await AsyncStorage.getItem('estatisticas_pendentes');
@@ -355,13 +344,14 @@ export default function App() {
       const arrayStats = JSON.parse(statsGuardados);
       if (arrayStats.length === 0) return;
 
+      const limparChave = (txt, padrao) => (txt || '').replace(/[.#$\[\]\/]/g, '').trim() || padrao;
       const agregacao = { artistas: {}, albuns: {}, musicas: {}, tempoMensal: {} };
 
       arrayStats.forEach((stat) => {
-        const artista = stat.artista.replace(/[.#$\[\]]/g, '').trim() || 'Desconhecido';
-        const album = stat.album.replace(/[.#$\[\]]/g, '').trim() || 'Sem Álbum';
-        const titulo = (stat.titulo || 'Desconhecida').replace(/[.#$\[\]]/g, '').trim();
-        const duracao = Math.floor(stat.duracao);
+        const artista = limparChave(stat.artista, 'Desconhecido');
+        const album = limparChave(stat.album, 'Sem Álbum');
+        const titulo = limparChave(stat.titulo, 'Desconhecida');
+        const duracao = Math.floor(stat.duracao || 0);
         const dataObj = new Date(stat.data);
         const mesAno = `${String(dataObj.getMonth() + 1).padStart(2, '0')}_${dataObj.getFullYear()}`;
 
@@ -369,47 +359,60 @@ export default function App() {
         agregacao.artistas[artista].reprod += 1;
         agregacao.artistas[artista].segs += duracao;
 
-        if (!agregacao.albuns[album]) agregacao.albuns[album] = { reprod: 0 };
-        agregacao.albuns[album].reprod += 1;
+        agregacao.albuns[album] = (agregacao.albuns[album] || 0) + 1;
 
-        const chaveMusica = `${titulo}_${artista}`.replace(/[.#$\[\]\/]/g, '');
+        const chaveMusica = `${titulo}_${artista}`;
         if (!agregacao.musicas[chaveMusica]) agregacao.musicas[chaveMusica] = { reprod: 0, titulo, artista };
         agregacao.musicas[chaveMusica].reprod += 1;
 
-        if (!agregacao.tempoMensal[mesAno]) agregacao.tempoMensal[mesAno] = 0;
-        agregacao.tempoMensal[mesAno] += duracao;
+        agregacao.tempoMensal[mesAno] = (agregacao.tempoMensal[mesAno] || 0) + duracao;
       });
 
+      // ServerValue.increment soma direto no servidor sem sobrescrever contadores antigos
+      const inc = firebase.database.ServerValue.increment;
       const updates = {};
-      Object.keys(agregacao.artistas).forEach((artista) => {
-        updates[`artistas/${artista}/reproducoes`] = firebase.database.ServerValue.increment(agregacao.artistas[artista].reprod);
-        updates[`artistas/${artista}/segundosTotais`] = firebase.database.ServerValue.increment(agregacao.artistas[artista].segs);
+
+      Object.entries(agregacao.artistas).forEach(([artista, v]) => {
+        updates[`artistas/${artista}/reproducoes`] = inc(v.reprod);
+        updates[`artistas/${artista}/segundosTotais`] = inc(v.segs);
       });
-      Object.keys(agregacao.albuns).forEach((album) => {
-        updates[`albuns/${album}/reproducoes`] = firebase.database.ServerValue.increment(agregacao.albuns[album].reprod);
+      Object.entries(agregacao.albuns).forEach(([album, reprod]) => {
+        updates[`albuns/${album}/reproducoes`] = inc(reprod);
       });
-      Object.keys(agregacao.musicas).forEach((chave) => {
-        updates[`musicas/${chave}/reproducoes`] = firebase.database.ServerValue.increment(agregacao.musicas[chave].reprod);
-        updates[`musicas/${chave}/titulo`] = agregacao.musicas[chave].titulo;
-        updates[`musicas/${chave}/artista`] = agregacao.musicas[chave].artista;
+      Object.entries(agregacao.musicas).forEach(([chave, v]) => {
+        updates[`musicas/${chave}/reproducoes`] = inc(v.reprod);
+        updates[`musicas/${chave}/titulo`] = v.titulo;
+        updates[`musicas/${chave}/artista`] = v.artista;
       });
-      Object.keys(agregacao.tempoMensal).forEach((mesAno) => {
-        updates[`tempoMensal/${mesAno}`] = firebase.database.ServerValue.increment(agregacao.tempoMensal[mesAno]);
+      Object.entries(agregacao.tempoMensal).forEach(([mesAno, segs]) => {
+        updates[`tempoMensal/${mesAno}`] = inc(segs);
       });
 
       await firebase.database().ref(`users/${uid}/conquistas`).update(updates);
       await AsyncStorage.removeItem('estatisticas_pendentes');
-    } catch (error) {}
+    } catch (e) {}
   };
 
+  // Monitora login/logout e mantém as playlists sincronizadas em tempo real
   useEffect(() => {
-    let unsubscribePlaylists;
+    let playlistsRef = null;
+    let listenerPlaylists = null;
+
+    const limparListenerPlaylists = () => {
+      if (playlistsRef && listenerPlaylists) {
+        playlistsRef.off('value', listenerPlaylists);
+        playlistsRef = null;
+        listenerPlaylists = null;
+      }
+    };
+
     const unsubscribeAuth = firebase.auth().onAuthStateChanged((user) => {
+      limparListenerPlaylists();
       setUsuario(user);
       if (user) {
         sincronizarEstatisticas(user.uid);
-        const playlistsRef = firebase.database().ref(`users/${user.uid}/playlists`);
-        unsubscribePlaylists = playlistsRef.on('value', (snap) => {
+        playlistsRef = firebase.database().ref(`users/${user.uid}/playlists`);
+        listenerPlaylists = playlistsRef.on('value', (snap) => {
           setPlaylistsGlobais(snap.val() || {});
         });
       } else {
@@ -420,45 +423,33 @@ export default function App() {
 
     return () => {
       unsubscribeAuth();
-      if (unsubscribePlaylists) firebase.database().ref().off('value', unsubscribePlaylists);
+      limparListenerPlaylists();
     };
   }, []);
 
   if (carregandoAuth || !listaCarregada) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: tema.bg }}>
+      <View style={[styles.carregando, { backgroundColor: tema.bg }]}>
         <ActivityIndicator size="large" color={tema.primaria} />
       </View>
     );
   }
 
+  const itemUnicoMenu = musicasMenu.length === 1 ? musicasMenu[0] : null;
+
+  const opcoesMenu = [
+    { icone: 'playlist-play', texto: 'Tocar de próximo', acao: () => tocarDeProximo(musicasMenu) },
+    { icone: 'playlist-plus', texto: 'Adicionar ao fim da fila', acao: () => adicionarAoFimDaFila(musicasMenu) },
+    { icone: 'folder-music-outline', texto: 'Adicionar a uma Playlist', acao: () => setExibirEscolherPlaylist(true) },
+  ];
+
   return (
     <MusicasContext.Provider
       value={{
-        musicas,
-        setMusicas,
-        usuario,
-        playlistsGlobais,
-        fila,
-        indiceFila,
-        setIndiceFila,
-        musicaAtual,
-        tocarAgora,
-        tocarLista,
-        tocarDeProximo,
-        adicionarAoFimDaFila,
-        reordenarFila,
-        avancarMusica,
-        voltarMusica,
-        removerDaFila,
-        abrirMenuOpcoes,
-        resolverMusicaLocal,
-        tema,
-        temaEscuro,
-        alternarTemaEscuro,
-        corPrimaria,
-        escolherCorPrimaria,
-        setModalTemaVisivel,
+        musicas, setMusicas, usuario, playlistsGlobais, resolverMusicaLocal, abrirMenuOpcoes,
+        fila, indiceFila, setIndiceFila, musicaAtual,
+        tocarAgora, tocarLista, tocarDeProximo, adicionarAoFimDaFila, reordenarFila, avancarMusica, voltarMusica, removerDaFila,
+        tema, temaEscuro, alternarTemaEscuro, corPrimaria, escolherCorPrimaria, setModalTemaVisivel,
       }}
     >
       <NavigationContainer>
@@ -474,37 +465,27 @@ export default function App() {
         </Stack.Navigator>
       </NavigationContainer>
 
-      <Modal visible={musicasMenu.length > 0} transparent={true} animationType="fade" onRequestClose={fecharMenuOpcoes}>
+      <Modal visible={musicasMenu.length > 0} transparent animationType="fade" onRequestClose={fecharMenuOpcoes}>
         <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={fecharMenuOpcoes}>
           <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
             <Text style={[styles.modalTitulo, { color: tema.texto }]} numberOfLines={1}>
-              {musicasMenu.length === 1
-                ? musicasMenu[0]?.tags?.title || musicasMenu[0]?.title || musicasMenu[0]?.name?.replace('.mp3', '')
+              {itemUnicoMenu
+                ? itemUnicoMenu.tags?.title || itemUnicoMenu.title || itemUnicoMenu.name?.replace('.mp3', '')
                 : `${musicasMenu.length} músicas selecionadas`}
             </Text>
-            {musicasMenu.length === 1 && (
+            {itemUnicoMenu && (
               <Text style={[styles.modalSubtitulo, { color: tema.subtexto }]} numberOfLines={1}>
-                {musicasMenu[0]?.tags?.artist || musicasMenu[0]?.artist || 'Artista Desconhecido'}
+                {itemUnicoMenu.tags?.artist || itemUnicoMenu.artist || 'Artista Desconhecido'}
               </Text>
             )}
 
             {!exibirEscolherPlaylist ? (
-              <>
-                <TouchableOpacity style={[styles.opcaoBotao, { borderBottomColor: tema.borda }]} onPress={() => tocarDeProximo(musicasMenu)}>
-                  <MaterialCommunityIcons name="playlist-play" size={24} color={tema.primaria} />
-                  <Text style={[styles.opcaoTexto, { color: tema.texto }]}>Tocar de próximo</Text>
+              opcoesMenu.map((op) => (
+                <TouchableOpacity key={op.texto} style={[styles.opcaoBotao, { borderBottomColor: tema.borda }]} onPress={op.acao}>
+                  <MaterialCommunityIcons name={op.icone} size={24} color={tema.primaria} />
+                  <Text style={[styles.opcaoTexto, { color: tema.texto }]}>{op.texto}</Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.opcaoBotao, { borderBottomColor: tema.borda }]} onPress={() => adicionarAoFimDaFila(musicasMenu)}>
-                  <MaterialCommunityIcons name="playlist-plus" size={24} color={tema.primaria} />
-                  <Text style={[styles.opcaoTexto, { color: tema.texto }]}>Adicionar ao fim da fila</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.opcaoBotao, { borderBottomColor: tema.borda }]} onPress={() => setExibirEscolherPlaylist(true)}>
-                  <MaterialCommunityIcons name="folder-music-outline" size={24} color={tema.primaria} />
-                  <Text style={[styles.opcaoTexto, { color: tema.texto }]}>Adicionar a uma Playlist</Text>
-                </TouchableOpacity>
-              </>
+              ))
             ) : (
               <View style={{ maxHeight: 260, marginTop: 10 }}>
                 <Text style={[styles.escolherTitulo, { color: tema.primaria }]}>Escolha a Playlist:</Text>
@@ -529,7 +510,7 @@ export default function App() {
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={modalTemaVisivel} transparent={true} animationType="fade" onRequestClose={() => setModalTemaVisivel(false)}>
+      <Modal visible={modalTemaVisivel} transparent animationType="fade" onRequestClose={() => setModalTemaVisivel(false)}>
         <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={() => setModalTemaVisivel(false)}>
           <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
             <Text style={[styles.modalTitulo, { color: tema.texto, marginBottom: 15 }]}>Aparência do Aplicativo</Text>
@@ -539,11 +520,7 @@ export default function App() {
                 <MaterialCommunityIcons name="theme-light-dark" size={24} color={tema.primaria} />
                 <Text style={[styles.opcaoTexto, { color: tema.texto, marginLeft: 0 }]}>Modo Escuro</Text>
               </View>
-              <Switch
-                value={temaEscuro}
-                onValueChange={alternarTemaEscuro}
-                trackColor={{ false: '#999', true: tema.primaria }}
-              />
+              <Switch value={temaEscuro} onValueChange={alternarTemaEscuro} trackColor={{ false: '#999', true: tema.primaria }} />
             </View>
 
             <Text style={[styles.escolherTitulo, { color: tema.subtexto, marginTop: 15 }]}>Paleta de Cores:</Text>
@@ -551,11 +528,7 @@ export default function App() {
               {PALETAS_CORES.map((p) => (
                 <TouchableOpacity
                   key={p.cor}
-                  style={[
-                    styles.bolinhaCor,
-                    { backgroundColor: p.cor },
-                    corPrimaria === p.cor && styles.bolinhaSelecionada,
-                  ]}
+                  style={[styles.bolinhaCor, { backgroundColor: p.cor }, corPrimaria === p.cor && styles.bolinhaSelecionada]}
                   onPress={() => escolherCorPrimaria(p.cor)}
                 >
                   {corPrimaria === p.cor && <MaterialCommunityIcons name="check" size={22} color="#FFF" />}
@@ -570,6 +543,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  carregando: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   modalFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalCard: { width: '90%', borderRadius: 16, padding: 20, elevation: 6 },
   modalTitulo: { fontSize: 18, fontWeight: 'bold', textAlign: 'center' },

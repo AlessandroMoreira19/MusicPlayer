@@ -1,83 +1,64 @@
 import { Platform } from 'react-native';
 
-// Utilitários de conversão Base64 e Uint8Array sem dependência de Buffer/Node
+const TABELA_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+
+// Converte bytes binários para Base64 sem depender de Buffer do Node.js
 function uint8ArrayToBase64(uint8) {
-  let binary = '';
-  const len = uint8.byteLength;
-  const chunkSize = 8192;
-  for (let i = 0; i < len; i += chunkSize) {
-    const chunk = uint8.subarray(i, Math.min(i + chunkSize, len));
-    binary += String.fromCharCode.apply(null, chunk);
+  let binario = '';
+  for (let i = 0; i < uint8.byteLength; i += 8192) {
+    binario += String.fromCharCode.apply(null, uint8.subarray(i, Math.min(i + 8192, uint8.byteLength)));
   }
-  if (typeof btoa === 'function') {
-    return btoa(binary);
+  if (typeof btoa === 'function') return btoa(binario);
+
+  let saida = '';
+  for (let i = 0; i < binario.length; ) {
+    const c1 = binario.charCodeAt(i++);
+    const c2 = binario.charCodeAt(i++);
+    const c3 = binario.charCodeAt(i++);
+    const e1 = c1 >> 2;
+    const e2 = ((c1 & 3) << 4) | (c2 >> 4);
+    let e3 = ((c2 & 15) << 2) | (c3 >> 6);
+    let e4 = c3 & 63;
+    if (isNaN(c2)) e3 = e4 = 64;
+    else if (isNaN(c3)) e4 = 64;
+    saida += TABELA_B64[e1] + TABELA_B64[e2] + TABELA_B64[e3] + TABELA_B64[e4];
   }
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-  let output = '';
-  let i = 0;
-  while (i < binary.length) {
-    const chr1 = binary.charCodeAt(i++);
-    const chr2 = binary.charCodeAt(i++);
-    const chr3 = binary.charCodeAt(i++);
-    const enc1 = chr1 >> 2;
-    const enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-    let enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-    let enc4 = chr3 & 63;
-    if (isNaN(chr2)) {
-      enc3 = enc4 = 64;
-    } else if (isNaN(chr3)) {
-      enc4 = 64;
-    }
-    output += chars.charAt(enc1) + chars.charAt(enc2) + chars.charAt(enc3) + chars.charAt(enc4);
-  }
-  return output;
+  return saida;
 }
 
 function base64ToUint8Array(base64) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const cleanBase64 = base64.replace(/[^A-Za-z0-9+/]/g, '');
-  const len = cleanBase64.length;
-  const bufferLength = Math.floor((len * 3) / 4);
-  const bytes = new Uint8Array(bufferLength);
+  const limpo = base64.replace(/[^A-Za-z0-9+/]/g, '');
+  const bytes = new Uint8Array(Math.floor((limpo.length * 3) / 4));
   let p = 0;
 
-  for (let i = 0; i < len; i += 4) {
-    const encoded1 = chars.indexOf(cleanBase64[i]);
-    const encoded2 = chars.indexOf(cleanBase64[i + 1]);
-    const encoded3 = chars.indexOf(cleanBase64[i + 2]);
-    const encoded4 = chars.indexOf(cleanBase64[i + 3]);
+  for (let i = 0; i < limpo.length; i += 4) {
+    const e1 = TABELA_B64.indexOf(limpo[i]);
+    const e2 = TABELA_B64.indexOf(limpo[i + 1]);
+    const e3 = TABELA_B64.indexOf(limpo[i + 2]);
+    const e4 = TABELA_B64.indexOf(limpo[i + 3]);
 
-    bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
-    if (encoded3 !== -1 && encoded3 !== 64) {
-      bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
-    }
-    if (encoded4 !== -1 && encoded4 !== 64) {
-      bytes[p++] = ((encoded3 & 3) << 6) | encoded4;
-    }
+    bytes[p++] = (e1 << 2) | (e2 >> 4);
+    if (e3 !== -1 && e3 !== 64) bytes[p++] = ((e2 & 15) << 4) | (e3 >> 2);
+    if (e4 !== -1 && e4 !== 64) bytes[p++] = ((e3 & 3) << 6) | e4;
   }
   return bytes.subarray(0, p);
 }
 
+// Lê apenas o início do MP3 (1,5 MB) onde ficam as tags e a capa, economizando memória
 function lerBytesViaXHR(uri, maxBytes = 1572864) {
   return new Promise((resolve, reject) => {
     try {
       const xhr = new XMLHttpRequest();
       xhr.onload = () => {
         const blob = xhr.response;
-        if (!blob) {
-          reject(new Error('Blob vazio'));
-          return;
-        }
+        if (!blob) return reject(new Error('Blob vazio'));
         const fatia = blob.slice ? blob.slice(0, maxBytes) : blob;
         const reader = new FileReader();
         reader.onloadend = () => {
           try {
-            const resultado = reader.result || '';
-            const base64Data = resultado.includes(',') ? resultado.split(',')[1] : resultado;
-            resolve({
-              bytes: base64ToUint8Array(base64Data),
-              totalSize: blob.size || 0,
-            });
+            const res = reader.result || '';
+            const b64 = res.includes(',') ? res.split(',')[1] : res;
+            resolve({ bytes: base64ToUint8Array(b64), totalSize: blob.size || 0 });
           } catch (e) {
             reject(e);
           }
@@ -95,263 +76,163 @@ function lerBytesViaXHR(uri, maxBytes = 1572864) {
   });
 }
 
+// Decodifica textos ID3 conforme o 1º byte: 0 = ISO-8859-1, 1/2 = UTF-16, 3 = UTF-8
 function decodificarTextoID3(bytes) {
   if (!bytes || bytes.length <= 1) return '';
   const encoding = bytes[0];
   const payload = bytes.subarray(1);
 
   try {
-    if (encoding === 0) {
-      // ISO-8859-1
-      let str = '';
-      for (let i = 0; i < payload.length; i++) {
-        if (payload[i] === 0) break;
-        str += String.fromCharCode(payload[i]);
-      }
-      return str.trim();
-    } else if (encoding === 3) {
-      // UTF-8
-      if (typeof TextDecoder !== 'undefined') {
-        const dec = new TextDecoder('utf-8');
-        return dec.decode(payload).replace(/\0.*$/, '').trim();
-      }
-      let str = '';
-      for (let i = 0; i < payload.length; i++) {
-        if (payload[i] === 0) break;
-        str += String.fromCharCode(payload[i]);
-      }
-      return decodeURIComponent(escape(str)).trim();
-    } else if (encoding === 1 || encoding === 2) {
-      // UTF-16 with BOM (1) ou UTF-16BE (2)
+    if (encoding === 1 || encoding === 2) {
       let inicio = 0;
-      let littleEndian = true;
+      let littleEndian = encoding !== 2;
       if (payload[0] === 0xfe && payload[1] === 0xff) {
         littleEndian = false;
         inicio = 2;
       } else if (payload[0] === 0xff && payload[1] === 0xfe) {
         littleEndian = true;
         inicio = 2;
-      } else if (encoding === 2) {
-        littleEndian = false;
       }
-      let resultado = '';
+      let txt = '';
       for (let i = inicio; i < payload.length - 1; i += 2) {
-        const code = littleEndian
-          ? payload[i] | (payload[i + 1] << 8)
-          : (payload[i] << 8) | payload[i + 1];
+        const code = littleEndian ? payload[i] | (payload[i + 1] << 8) : (payload[i] << 8) | payload[i + 1];
         if (code === 0) break;
-        resultado += String.fromCharCode(code);
+        txt += String.fromCharCode(code);
       }
-      return resultado.trim();
+      return txt.trim();
     }
-  } catch (e) {}
-  return '';
+
+    if (encoding === 3 && typeof TextDecoder !== 'undefined') {
+      return new TextDecoder('utf-8').decode(payload).replace(/\0.*$/, '').trim();
+    }
+
+    let str = '';
+    for (let i = 0; i < payload.length && payload[i] !== 0; i++) {
+      str += String.fromCharCode(payload[i]);
+    }
+    return (encoding === 3 ? decodeURIComponent(escape(str)) : str).trim();
+  } catch (e) {
+    return '';
+  }
 }
 
-function extrairID3Binario(uint8Array) {
-  const resultado = { title: '', artist: '', album: '', pictureBase64: null, mime: 'image/jpeg' };
+// Inteiro "syncsafe" do padrão ID3: usa apenas 7 bits úteis por byte
+const lerSyncSafe = (b, o) => ((b[o] & 0x7f) << 21) | ((b[o + 1] & 0x7f) << 14) | ((b[o + 2] & 0x7f) << 7) | (b[o + 3] & 0x7f);
+
+// Percorre os frames binários ID3v2.2, v2.3 e v2.4 em busca de título, artista, álbum e capa
+function extrairID3Binario(bytes) {
+  const res = { title: '', artist: '', album: '', pictureBase64: null, mime: 'image/jpeg' };
   try {
-    if (
-      !uint8Array ||
-      uint8Array.length < 10 ||
-      uint8Array[0] !== 0x49 ||
-      uint8Array[1] !== 0x44 ||
-      uint8Array[2] !== 0x33
-    ) {
-      return resultado;
+    // Verifica assinatura "ID3" (0x49, 0x44, 0x33) nos 3 primeiros bytes
+    if (!bytes || bytes.length < 10 || bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) {
+      return res;
     }
 
-    const versao = uint8Array[3];
-    const tamanhoTag =
-      ((uint8Array[6] & 0x7f) << 21) |
-      ((uint8Array[7] & 0x7f) << 14) |
-      ((uint8Array[8] & 0x7f) << 7) |
-      (uint8Array[9] & 0x7f);
-
-    const limite = Math.min(uint8Array.length, 10 + tamanhoTag);
+    const versao = bytes[3];
+    const v22 = versao === 2;
+    const tamHeaderFrame = v22 ? 6 : 10;
+    const limite = Math.min(bytes.length, 10 + lerSyncSafe(bytes, 6));
     let offset = 10;
 
-    // Suporte ID3v2.2 (tags de 3 caracteres e tamanhos de 3 bytes)
-    if (versao === 2) {
-      while (offset + 6 < limite) {
-        const frameId = String.fromCharCode(
-          uint8Array[offset],
-          uint8Array[offset + 1],
-          uint8Array[offset + 2]
-        );
-        if (!/^[A-Z0-9]{3}$/.test(frameId)) break;
-        const frameSize =
-          (uint8Array[offset + 3] << 16) |
-          (uint8Array[offset + 4] << 8) |
-          uint8Array[offset + 5];
+    while (offset + tamHeaderFrame < limite) {
+      const frameId = v22
+        ? String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2])
+        : String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
 
-        if (frameSize <= 0 || offset + 6 + frameSize > uint8Array.length) break;
-        const dadosFrame = uint8Array.subarray(offset + 6, offset + 6 + frameSize);
+      if (!(v22 ? /^[A-Z0-9]{3}$/ : /^[A-Z0-9]{4}$/).test(frameId)) break;
 
-        if (frameId === 'TT2' && !resultado.title) {
-          resultado.title = decodificarTextoID3(dadosFrame);
-        } else if (frameId === 'TP1' && !resultado.artist) {
-          resultado.artist = decodificarTextoID3(dadosFrame);
-        } else if (frameId === 'TAL' && !resultado.album) {
-          resultado.album = decodificarTextoID3(dadosFrame);
-        } else if (frameId === 'PIC' && !resultado.pictureBase64) {
-          if (dadosFrame.length > 5) {
-            const format = String.fromCharCode(dadosFrame[1], dadosFrame[2], dadosFrame[3]).toLowerCase();
-            resultado.mime = format === 'png' ? 'image/png' : 'image/jpeg';
-            resultado.pictureBase64 = uint8ArrayToBase64(dadosFrame.subarray(5));
-          }
-        }
-        offset += 6 + frameSize;
-      }
-      return resultado;
-    }
+      const frameSize = v22
+        ? (bytes[offset + 3] << 16) | (bytes[offset + 4] << 8) | bytes[offset + 5]
+        : versao === 4
+          ? lerSyncSafe(bytes, offset + 4)
+          : ((bytes[offset + 4] << 24) >>> 0) + ((bytes[offset + 5] << 16) | (bytes[offset + 6] << 8) | bytes[offset + 7]);
 
-    // Suporte ID3v2.3 e ID3v2.4 (tags de 4 caracteres)
-    while (offset + 10 < limite) {
-      const frameId = String.fromCharCode(
-        uint8Array[offset],
-        uint8Array[offset + 1],
-        uint8Array[offset + 2],
-        uint8Array[offset + 3]
-      );
+      if (frameSize <= 0 || offset + tamHeaderFrame + frameSize > bytes.length) break;
+      const dados = bytes.subarray(offset + tamHeaderFrame, offset + tamHeaderFrame + frameSize);
 
-      if (!/^[A-Z0-9]{4}$/.test(frameId)) break;
-
-      let frameSize = 0;
-      if (versao === 4) {
-        frameSize =
-          ((uint8Array[offset + 4] & 0x7f) << 21) |
-          ((uint8Array[offset + 5] & 0x7f) << 14) |
-          ((uint8Array[offset + 6] & 0x7f) << 7) |
-          (uint8Array[offset + 7] & 0x7f);
-      } else {
-        frameSize =
-          (uint8Array[offset + 4] << 24) |
-          (uint8Array[offset + 5] << 16) |
-          (uint8Array[offset + 6] << 8) |
-          uint8Array[offset + 7];
-      }
-
-      if (frameSize <= 0 || offset + 10 + frameSize > uint8Array.length) break;
-
-      const dadosFrame = uint8Array.subarray(offset + 10, offset + 10 + frameSize);
-
-      if (frameId === 'TIT2' && !resultado.title) {
-        resultado.title = decodificarTextoID3(dadosFrame);
-      } else if (frameId === 'TPE1' && !resultado.artist) {
-        resultado.artist = decodificarTextoID3(dadosFrame);
-      } else if (frameId === 'TALB' && !resultado.album) {
-        resultado.album = decodificarTextoID3(dadosFrame);
-      } else if (frameId === 'APIC' && !resultado.pictureBase64) {
-        const textEncoding = dadosFrame[0];
+      if ((frameId === 'TIT2' || frameId === 'TT2') && !res.title) {
+        res.title = decodificarTextoID3(dados);
+      } else if ((frameId === 'TPE1' || frameId === 'TP1') && !res.artist) {
+        res.artist = decodificarTextoID3(dados);
+      } else if ((frameId === 'TALB' || frameId === 'TAL') && !res.album) {
+        res.album = decodificarTextoID3(dados);
+      } else if (frameId === 'PIC' && !res.pictureBase64 && dados.length > 5) {
+        const fmt = String.fromCharCode(dados[1], dados[2], dados[3]).toLowerCase();
+        res.mime = fmt === 'png' ? 'image/png' : 'image/jpeg';
+        let pos = 5;
+        while (pos < dados.length && dados[pos] !== 0) pos++;
+        if (pos + 1 < dados.length) res.pictureBase64 = uint8ArrayToBase64(dados.subarray(pos + 1));
+      } else if (frameId === 'APIC' && !res.pictureBase64) {
+        // Pula cabeçalho do APIC (encoding + MIME + tipo + descrição) até chegar nos bytes da imagem
+        const enc = dados[0];
         let pos = 1;
         let mime = '';
-        while (pos < dadosFrame.length && dadosFrame[pos] !== 0) {
-          mime += String.fromCharCode(dadosFrame[pos]);
-          pos++;
-        }
-        pos++;
-        pos++;
-
-        if (textEncoding === 1 || textEncoding === 2) {
-          while (pos < dadosFrame.length - 1 && !(dadosFrame[pos] === 0 && dadosFrame[pos + 1] === 0)) {
-            pos += 2;
-          }
+        while (pos < dados.length && dados[pos] !== 0) mime += String.fromCharCode(dados[pos++]);
+        pos += 2; // Pula o byte nulo do MIME e o byte de tipo da imagem
+        if (enc === 1 || enc === 2) {
+          while (pos < dados.length - 1 && !(dados[pos] === 0 && dados[pos + 1] === 0)) pos += 2;
           pos += 2;
         } else {
-          while (pos < dadosFrame.length && dadosFrame[pos] !== 0) {
-            pos++;
-          }
+          while (pos < dados.length && dados[pos] !== 0) pos++;
           pos++;
         }
-
-        if (pos < dadosFrame.length) {
-          const imgBytes = dadosFrame.subarray(pos);
-          resultado.pictureBase64 = uint8ArrayToBase64(imgBytes);
-          resultado.mime = mime || 'image/jpeg';
+        if (pos < dados.length) {
+          res.pictureBase64 = uint8ArrayToBase64(dados.subarray(pos));
+          res.mime = mime || 'image/jpeg';
         }
       }
 
-      offset += 10 + frameSize;
+      if (res.title && res.artist && res.album && res.pictureBase64) break;
+      offset += tamHeaderFrame + frameSize;
     }
   } catch (e) {}
-  return resultado;
+  return res;
+}
+
+async function carregarBytesAudio(uri) {
+  if (Platform.OS !== 'web') {
+    try {
+      return await lerBytesViaXHR(uri);
+    } catch (e) {}
+  }
+
+  try {
+    const resp = await fetch(uri);
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    return { bytes, totalSize: bytes.length };
+  } catch (e) {}
+
+  if (Platform.OS !== 'web') {
+    try {
+      const FileSystem = require('expo-file-system');
+      if (FileSystem?.readAsStringAsync) {
+        const b64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+        const bytes = base64ToUint8Array(b64);
+        return { bytes, totalSize: bytes.length };
+      }
+    } catch (e) {}
+  }
+  return null;
 }
 
 export async function extrairTags(uri, nomeArquivoPadrao = 'Música Desconhecida') {
   const nomeLimpo = nomeArquivoPadrao.replace(/\.[^/.]+$/, '');
-  let tamanhoArquivo = 0;
-  let uint8Array = null;
+  const padrao = { title: nomeLimpo, artist: 'Artista Desconhecido', album: 'Sem Álbum', artwork: null, duration: 0 };
 
   try {
-    if (Platform.OS === 'web') {
-      const response = await fetch(uri);
-      const arrayBuffer = await response.arrayBuffer();
-      uint8Array = new Uint8Array(arrayBuffer);
-      tamanhoArquivo = uint8Array.length;
-    } else {
-      try {
-        const resXHR = await lerBytesViaXHR(uri, 1572864);
-        uint8Array = resXHR.bytes;
-        tamanhoArquivo = resXHR.totalSize;
-      } catch (e1) {}
+    const arquivo = await carregarBytesAudio(uri);
+    if (!arquivo?.bytes) return padrao;
 
-      if (!uint8Array) {
-        try {
-          const response = await fetch(uri);
-          const arrayBuffer = await response.arrayBuffer();
-          uint8Array = new Uint8Array(arrayBuffer);
-          tamanhoArquivo = uint8Array.length;
-        } catch (eFetch) {}
-      }
-
-      if (!uint8Array) {
-        try {
-          const FileSystem = require('expo-file-system');
-          if (FileSystem?.readAsStringAsync) {
-            const base64Data = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-            uint8Array = base64ToUint8Array(base64Data);
-            tamanhoArquivo = uint8Array.length;
-          }
-        } catch (e3) {}
-      }
-    }
-
-    if (!uint8Array) {
-      return {
-        title: nomeLimpo,
-        artist: 'Artista Desconhecido',
-        album: 'Sem Álbum',
-        artwork: null,
-        duration: 0,
-      };
-    }
-
-    const id3 = extrairID3Binario(uint8Array);
-    const titulo = id3.title || nomeLimpo;
-    const artista = id3.artist || 'Artista Desconhecido';
-    const album = id3.album || 'Sem Álbum';
-    const capaUri = id3.pictureBase64 ? `data:${id3.mime};base64,${id3.pictureBase64}` : null;
-    let duracao = 0;
-
-    if (tamanhoArquivo > 0) {
-      duracao = Math.round((tamanhoArquivo * 8) / 320000);
-    }
-
+    const id3 = extrairID3Binario(arquivo.bytes);
     return {
-      title: titulo,
-      artist: artista,
-      album: album,
-      artwork: capaUri,
-      duration: duracao || 0,
+      title: id3.title || nomeLimpo,
+      artist: id3.artist || 'Artista Desconhecido',
+      album: id3.album || 'Sem Álbum',
+      artwork: id3.pictureBase64 ? `data:${id3.mime};base64,${id3.pictureBase64}` : null,
+      // Estima duração inicial em 320 kbps até o player carregar a duração exata
+      duration: arquivo.totalSize > 0 ? Math.round((arquivo.totalSize * 8) / 320000) : 0,
     };
-  } catch (error) {
-    return {
-      title: nomeLimpo,
-      artist: 'Artista Desconhecido',
-      album: 'Sem Álbum',
-      artwork: null,
-      duration: 0,
-    };
+  } catch (e) {
+    return padrao;
   }
 }
