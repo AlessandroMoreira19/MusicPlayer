@@ -1,11 +1,18 @@
-import React, { useState, useEffect, useContext, createContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, Text, ActivityIndicator, Modal, TouchableOpacity, FlatList, StyleSheet, Switch } from 'react-native';
+import { View, Text, ActivityIndicator, Modal, TouchableOpacity, FlatList, StyleSheet, Switch, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import firebase from './config/config';
+import firebase, {
+  MusicasContext,
+  MASCOTE,
+  PALETAS_CORES,
+  formatarTempo,
+  AnimarEntrada,
+  BannerMascote,
+} from './config/config';
 
 import Login from './components/Login';
 import Cadastro from './components/Cadastro';
@@ -18,24 +25,7 @@ import Conquistas from './components/Conquistas';
 import TelaAlbum from './components/TelaAlbum';
 import TelaArtista from './components/TelaArtista';
 
-export const MusicasContext = createContext();
-
-export const PALETAS_CORES = [
-  { nome: 'Roxo Clássico', cor: '#7B1FA2', clara: '#f2e6ff' },
-  { nome: 'Verde Spotify', cor: '#1DB954', clara: '#e6f9ed' },
-  { nome: 'Azul Oceano', cor: '#0288D1', clara: '#e1f5fe' },
-  { nome: 'Vermelho Crimson', cor: '#E53935', clara: '#ffebee' },
-  { nome: 'Laranja Sunset', cor: '#FF6D00', clara: '#fff3e0' },
-  { nome: 'Rosa Neon', cor: '#D81B60', clara: '#fce4ec' },
-];
-
-// Formata segundos para "M:SS" em todas as telas do app
-export const formatarTempo = (segundos, padrao = '00:00') => {
-  if (!segundos) return padrao;
-  const min = Math.floor(segundos / 60);
-  const seg = Math.floor(segundos % 60);
-  return `${min}:${seg < 10 ? '0' : ''}${seg}`;
-};
+export { MusicasContext, MASCOTE, PALETAS_CORES, formatarTempo, AnimarEntrada, BannerMascote };
 
 const NavegacaoTabs = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -44,7 +34,7 @@ const PlaylistsStack = createNativeStackNavigator();
 
 function BuscarNavegacao() {
   return (
-    <BuscarStack.Navigator screenOptions={{ headerShown: false }}>
+    <BuscarStack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       <BuscarStack.Screen name="BuscarInicio" component={BuscarItens} />
       <BuscarStack.Screen name="Album" component={TelaAlbum} />
       <BuscarStack.Screen name="Artista" component={TelaArtista} />
@@ -54,7 +44,7 @@ function BuscarNavegacao() {
 
 function PlaylistsNavegacao() {
   return (
-    <PlaylistsStack.Navigator screenOptions={{ headerShown: false }}>
+    <PlaylistsStack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       <PlaylistsStack.Screen name="PlaylistsInicio" component={Playlists} />
       <PlaylistsStack.Screen name="TelaPlaylist" component={TelaPlaylist} />
     </PlaylistsStack.Navigator>
@@ -75,19 +65,22 @@ function AppTabs() {
     <NavegacaoTabs.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
+        sceneStyle: { backgroundColor: tema.bg },
         tabBarActiveTintColor: tema.primaria,
         tabBarInactiveTintColor: tema.subtexto,
-        tabBarStyle: { backgroundColor: tema.card, borderTopColor: tema.borda },
-        tabBarIcon: ({ color, size }) => (
-          <MaterialCommunityIcons name={icones[route.name] || 'music'} size={size} color={color} />
+        tabBarStyle: { backgroundColor: tema.card, borderTopColor: tema.borda, height: 60, paddingBottom: 6 },
+        tabBarIcon: ({ color, size, focused }) => (
+          <View style={focused ? [styles.iconeTabAtivo, { backgroundColor: tema.primariaClara }] : null}>
+            <MaterialCommunityIcons name={icones[route.name] || 'music'} size={size} color={color} />
+          </View>
         ),
       })}
     >
       <NavegacaoTabs.Screen name="Reproduzir" component={ReproduzirItens} />
       <NavegacaoTabs.Screen name="Playlists" component={PlaylistsNavegacao} />
+      <NavegacaoTabs.Screen name="Buscar" component={BuscarNavegacao} />
       <NavegacaoTabs.Screen name="Listar" component={ListarItens} />
       <NavegacaoTabs.Screen name="Conquistas" component={Conquistas} />
-      <NavegacaoTabs.Screen name="Buscar" component={BuscarNavegacao} />
     </NavegacaoTabs.Navigator>
   );
 }
@@ -100,7 +93,7 @@ export default function App() {
   const [carregandoAuth, setCarregandoAuth] = useState(true);
 
   const [temaEscuro, setTemaEscuro] = useState(false);
-  const [corPrimaria, setCorPrimaria] = useState('#7B1FA2');
+  const [corPrimaria, setCorPrimaria] = useState('#6C3CE9');
   const [modalTemaVisivel, setModalTemaVisivel] = useState(false);
 
   const [fila, setFila] = useState([]);
@@ -114,11 +107,11 @@ export default function App() {
     escuro: temaEscuro,
     primaria: paletaAtual.cor,
     primariaClara: temaEscuro ? 'rgba(255,255,255,0.12)' : paletaAtual.clara,
-    bg: temaEscuro ? '#121212' : '#E5E5E5',
-    card: temaEscuro ? '#1E1E1E' : '#FFFFFF',
-    texto: temaEscuro ? '#F5F5F5' : '#222222',
-    subtexto: temaEscuro ? '#AAAAAA' : '#666666',
-    borda: temaEscuro ? '#333333' : '#EEEEEE',
+    bg: temaEscuro ? '#0F0F17' : '#F2F1F8',
+    card: temaEscuro ? '#1B1B29' : '#FFFFFF',
+    texto: temaEscuro ? '#F5F5F7' : '#1E1E2C',
+    subtexto: temaEscuro ? '#A0A0B8' : '#6E6E85',
+    borda: temaEscuro ? '#2C2C40' : '#E6E4F0',
   };
 
   const musicaAtual = indiceFila >= 0 && indiceFila < fila.length ? fila[indiceFila] : null;
@@ -247,7 +240,6 @@ export default function App() {
     const filaFinal = listaItens.map(formatarItemParaFila).filter((m) => !m.indisponivel);
     if (filaFinal.length === 0) return;
 
-    // Embaralhamento Fisher-Yates para modo aleatório
     if (aleatorio) {
       for (let i = filaFinal.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -368,7 +360,6 @@ export default function App() {
         agregacao.tempoMensal[mesAno] = (agregacao.tempoMensal[mesAno] || 0) + duracao;
       });
 
-      // ServerValue.increment soma direto no servidor sem sobrescrever contadores antigos
       const inc = firebase.database.ServerValue.increment;
       const updates = {};
 
@@ -430,13 +421,14 @@ export default function App() {
   if (carregandoAuth || !listaCarregada) {
     return (
       <View style={[styles.carregando, { backgroundColor: tema.bg }]}>
+        <Image source={MASCOTE.voando} style={styles.mascoteCarregando} />
         <ActivityIndicator size="large" color={tema.primaria} />
+        <Text style={[styles.textoCarregando, { color: tema.subtexto }]}>Nyx está preparando seu som...</Text>
       </View>
     );
   }
 
   const itemUnicoMenu = musicasMenu.length === 1 ? musicasMenu[0] : null;
-
   const opcoesMenu = [
     { icone: 'playlist-play', texto: 'Tocar de próximo', acao: () => tocarDeProximo(musicasMenu) },
     { icone: 'playlist-plus', texto: 'Adicionar ao fim da fila', acao: () => adicionarAoFimDaFila(musicasMenu) },
@@ -453,7 +445,7 @@ export default function App() {
       }}
     >
       <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
           {usuario ? (
             <Stack.Screen name="MainTabs" component={AppTabs} />
           ) : (
@@ -468,16 +460,21 @@ export default function App() {
       <Modal visible={musicasMenu.length > 0} transparent animationType="fade" onRequestClose={fecharMenuOpcoes}>
         <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={fecharMenuOpcoes}>
           <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
-            <Text style={[styles.modalTitulo, { color: tema.texto }]} numberOfLines={1}>
-              {itemUnicoMenu
-                ? itemUnicoMenu.tags?.title || itemUnicoMenu.title || itemUnicoMenu.name?.replace('.mp3', '')
-                : `${musicasMenu.length} músicas selecionadas`}
-            </Text>
-            {itemUnicoMenu && (
-              <Text style={[styles.modalSubtitulo, { color: tema.subtexto }]} numberOfLines={1}>
-                {itemUnicoMenu.tags?.artist || itemUnicoMenu.artist || 'Artista Desconhecido'}
-              </Text>
-            )}
+            <View style={styles.cabecalhoModalMascote}>
+              <Image source={MASCOTE.atento} style={styles.mascoteModalPequeno} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.modalTitulo, { color: tema.texto, textAlign: 'left' }]} numberOfLines={1}>
+                  {itemUnicoMenu
+                    ? itemUnicoMenu.tags?.title || itemUnicoMenu.title || itemUnicoMenu.name?.replace('.mp3', '')
+                    : `${musicasMenu.length} músicas selecionadas`}
+                </Text>
+                {itemUnicoMenu && (
+                  <Text style={[styles.modalSubtitulo, { color: tema.subtexto, textAlign: 'left', marginBottom: 0 }]} numberOfLines={1}>
+                    {itemUnicoMenu.tags?.artist || itemUnicoMenu.artist || 'Artista Desconhecido'}
+                  </Text>
+                )}
+              </View>
+            </View>
 
             {!exibirEscolherPlaylist ? (
               opcoesMenu.map((op) => (
@@ -513,7 +510,10 @@ export default function App() {
       <Modal visible={modalTemaVisivel} transparent animationType="fade" onRequestClose={() => setModalTemaVisivel(false)}>
         <TouchableOpacity style={styles.modalFundo} activeOpacity={1} onPress={() => setModalTemaVisivel(false)}>
           <TouchableOpacity activeOpacity={1} style={[styles.modalCard, { backgroundColor: tema.card }]}>
-            <Text style={[styles.modalTitulo, { color: tema.texto, marginBottom: 15 }]}>Aparência do Aplicativo</Text>
+            <View style={{ alignItems: 'center', marginBottom: 10 }}>
+              <Image source={MASCOTE.feliz} style={{ width: 64, height: 64, marginBottom: 6 }} />
+              <Text style={[styles.modalTitulo, { color: tema.texto }]}>Visual do Nyx</Text>
+            </View>
 
             <View style={[styles.linhaSwitch, { borderBottomColor: tema.borda }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -543,11 +543,16 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  carregando: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  carregando: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
+  iconeTabAtivo: { paddingHorizontal: 12, paddingVertical: 2, borderRadius: 14 },
+  mascoteCarregando: { width: 110, height: 110 },
+  textoCarregando: { fontSize: 15, fontWeight: '600' },
   modalFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalCard: { width: '90%', borderRadius: 16, padding: 20, elevation: 6 },
+  modalCard: { width: '90%', borderRadius: 20, padding: 20, elevation: 6 },
+  cabecalhoModalMascote: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  mascoteModalPequeno: { width: 48, height: 48 },
   modalTitulo: { fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
-  modalSubtitulo: { fontSize: 14, textAlign: 'center', marginBottom: 12, marginTop: 4 },
+  modalSubtitulo: { fontSize: 14, textAlign: 'center', marginBottom: 12, marginTop: 2 },
   escolherTitulo: { fontSize: 14, fontWeight: 'bold', marginBottom: 10 },
   opcaoBotao: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1 },
   opcaoTexto: { fontSize: 16, marginLeft: 15, fontWeight: '500' },

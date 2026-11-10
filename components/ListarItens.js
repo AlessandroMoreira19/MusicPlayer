@@ -2,7 +2,7 @@ import React, { useContext, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Image, Alert } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { MusicasContext, formatarTempo } from '../App';
+import { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada, BannerMascote } from '../config/config';
 import { extrairTags } from './ExtrairTags';
 
 export default function ListarItens({ navigation }) {
@@ -139,8 +139,8 @@ export default function ListarItens({ navigation }) {
       <TouchableOpacity
         style={[
           styles.itemContainer,
-          { backgroundColor: tema.card },
-          estaSelecionada && { borderColor: tema.primaria, borderWidth: 2 },
+          { backgroundColor: tema.card, borderColor: estaSelecionada ? tema.primaria : tema.borda },
+          estaSelecionada && { borderWidth: 2 },
         ]}
         onPress={() => clicarItem(item)}
         onLongPress={() => !modoSelecao && abrirMenuOpcoes(item)}
@@ -159,7 +159,7 @@ export default function ListarItens({ navigation }) {
           <Image source={{ uri: item.tags.artwork }} style={styles.capaMiniatura} />
         ) : (
           <View style={[styles.capaMiniatura, { backgroundColor: tema.primariaClara }]}>
-            <MaterialCommunityIcons name="music-note" size={24} color={tema.primaria} />
+            <Image source={MASCOTE.fones} style={{ width: 40, height: 40 }} />
           </View>
         )}
 
@@ -190,36 +190,38 @@ export default function ListarItens({ navigation }) {
     { icone: 'trash-can-outline', texto: 'Apagar', cor: '#FF6B6B', acao: apagarSelecionadasEmLote },
   ];
 
-  return (
-    <View style={[styles.container, { backgroundColor: tema.bg }]}>
-      <View style={styles.topoBarra}>
-        <TouchableOpacity style={styles.iconeTopo} onPress={atualizarMetadadosExistentes}>
-          <MaterialCommunityIcons name="refresh" size={24} color={tema.primaria} />
+  const botoesTopo = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <TouchableOpacity style={styles.iconeTopo} onPress={atualizarMetadadosExistentes}>
+        <MaterialCommunityIcons name="refresh" size={22} color={tema.primaria} />
+      </TouchableOpacity>
+      {musicas.length > 0 && (
+        <TouchableOpacity
+          style={[styles.botaoSelecionarTopo, { backgroundColor: modoSelecao ? tema.primaria : tema.primariaClara }]}
+          onPress={() => (modoSelecao ? sairModoSelecao() : setModoSelecao(true))}
+        >
+          <MaterialCommunityIcons
+            name="checkbox-multiple-marked-outline"
+            size={20}
+            color={modoSelecao ? '#FFF' : tema.primaria}
+          />
         </TouchableOpacity>
+      )}
+      <TouchableOpacity style={styles.iconeTopo} onPress={() => setModalTemaVisivel(true)}>
+        <MaterialCommunityIcons name="palette" size={22} color={tema.primaria} />
+      </TouchableOpacity>
+    </View>
+  );
 
-        <View style={styles.tituloContainer}>
-          <Image source={require('../assets/mascote.png')} style={styles.mascoteIcone} />
-          <Text style={[styles.titulo, { color: tema.primaria }]}>Minhas Músicas</Text>
-        </View>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          {musicas.length > 0 && (
-            <TouchableOpacity
-              style={[styles.botaoSelecionarTopo, { backgroundColor: modoSelecao ? tema.primaria : tema.card }]}
-              onPress={() => (modoSelecao ? sairModoSelecao() : setModoSelecao(true))}
-            >
-              <MaterialCommunityIcons
-                name="checkbox-multiple-marked-outline"
-                size={20}
-                color={modoSelecao ? '#FFF' : tema.primaria}
-              />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.iconeTopo} onPress={() => setModalTemaVisivel(true)}>
-            <MaterialCommunityIcons name="palette" size={24} color={tema.primaria} />
-          </TouchableOpacity>
-        </View>
-      </View>
+  return (
+    <AnimarEntrada style={[styles.container, { backgroundColor: tema.bg }]}>
+      <BannerMascote
+        pose={carregando ? MASCOTE.trabalhando : MASCOTE.play}
+        titulo="Minhas Músicas"
+        subtitulo={carregando ? 'Nyx está lendo tags e capas...' : `${musicas.length} música(s) na biblioteca`}
+        tema={tema}
+        direita={botoesTopo}
+      />
 
       <TouchableOpacity
         style={[styles.botao, { backgroundColor: tema.primaria }]}
@@ -236,8 +238,9 @@ export default function ListarItens({ navigation }) {
         renderItem={renderizarItem}
         ListEmptyComponent={
           <View style={styles.vazioContainer}>
+            <Image source={MASCOTE.play} style={{ width: 115, height: 115, marginBottom: 10 }} />
             <Text style={[styles.textoCentro, { color: tema.subtexto }]}>
-              Nenhuma música carregada. Toque em Adicionar Músicas acima.
+              Nenhuma música carregada ainda. Toque em "Adicionar Músicas" para o Nyx organizar sua biblioteca!
             </Text>
           </View>
         }
@@ -273,30 +276,26 @@ export default function ListarItens({ navigation }) {
           </View>
         </View>
       )}
-    </View>
+    </AnimarEntrada>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', paddingTop: 45 },
-  topoBarra: { flexDirection: 'row', width: '90%', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   iconeTopo: { padding: 6 },
-  botaoSelecionarTopo: { padding: 8, borderRadius: 8, elevation: 2 },
-  tituloContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  mascoteIcone: { width: 28, height: 28 },
-  titulo: { fontSize: 22, fontWeight: 'bold' },
-  botao: { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 25, borderRadius: 10, alignItems: 'center', gap: 10, marginBottom: 15, width: '90%', justifyContent: 'center', elevation: 3 },
+  botaoSelecionarTopo: { padding: 7, borderRadius: 10 },
+  botao: { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 25, borderRadius: 14, alignItems: 'center', gap: 10, marginBottom: 14, width: '92%', justifyContent: 'center', elevation: 3 },
   textoBotao: { color: 'white', fontSize: 16, fontWeight: 'bold' },
   lista: { width: '100%', paddingHorizontal: 16 },
-  itemContainer: { flexDirection: 'row', padding: 10, borderRadius: 12, marginBottom: 10, alignItems: 'center', elevation: 2 },
-  capaMiniatura: { width: 48, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 12, overflow: 'hidden' },
+  itemContainer: { flexDirection: 'row', padding: 10, borderRadius: 14, marginBottom: 10, alignItems: 'center', borderWidth: 1, elevation: 1 },
+  capaMiniatura: { width: 48, height: 48, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12, overflow: 'hidden' },
   infoContainer: { flex: 1 },
   nomeMusica: { fontSize: 15, fontWeight: 'bold' },
   nomeArtista: { fontSize: 12, marginTop: 3 },
   duracaoTexto: { fontSize: 12, fontWeight: 'bold', marginHorizontal: 8 },
   botaoRemover: { padding: 6 },
-  vazioContainer: { marginTop: 40, alignItems: 'center', paddingHorizontal: 20 },
-  textoCentro: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
+  vazioContainer: { marginTop: 35, alignItems: 'center', paddingHorizontal: 25 },
+  textoCentro: { fontSize: 14, textAlign: 'center', lineHeight: 21 },
   barraMultiSelecao: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 14, borderTopWidth: 1, elevation: 10 },
   cabecalhoSelecao: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   contadorSelecao: { fontSize: 13, fontWeight: 'bold' },

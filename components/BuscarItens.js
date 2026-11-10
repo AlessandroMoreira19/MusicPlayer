@@ -1,12 +1,12 @@
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { MusicasContext, formatarTempo } from '../App';
+import { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada, BannerMascote } from '../config/config';
 
-const ICONES_TIPO = {
-  musica: 'music-note',
-  album: 'album',
-  artista: 'account-music',
+const POSES_TIPO = {
+  musica: MASCOTE.fones,
+  album: MASCOTE.som,
+  artista: MASCOTE.atento,
 };
 
 export default function BuscarItens({ navigation }) {
@@ -98,8 +98,8 @@ export default function BuscarItens({ navigation }) {
       <TouchableOpacity
         style={[
           styles.itemContainer,
-          { backgroundColor: tema.card },
-          estaSelecionada && { borderColor: tema.primaria, borderWidth: 2 },
+          { backgroundColor: tema.card, borderColor: estaSelecionada ? tema.primaria : tema.borda },
+          estaSelecionada && { borderWidth: 2 },
         ]}
         onPress={() => acaoAoClicar(item)}
         onLongPress={() => item.tipo === 'musica' && !modoSelecao && abrirMenuOpcoes(item.original)}
@@ -118,7 +118,7 @@ export default function BuscarItens({ navigation }) {
           <Image source={{ uri: item.artwork }} style={styles.capaMiniatura} />
         ) : (
           <View style={[styles.capaMiniatura, { backgroundColor: tema.primariaClara }]}>
-            <MaterialCommunityIcons name={ICONES_TIPO[item.tipo] || 'music-note'} size={24} color={tema.primaria} />
+            <Image source={POSES_TIPO[item.tipo] || MASCOTE.fones} style={{ width: 40, height: 40 }} />
           </View>
         )}
 
@@ -147,29 +147,33 @@ export default function BuscarItens({ navigation }) {
     { icone: 'playlist-plus', texto: '+ Fim da Fila', acao: () => executarAcaoLote(adicionarAoFimDaFila) },
   ];
 
-  return (
-    <View style={[styles.container, { backgroundColor: tema.bg }]}>
-      <View style={styles.topoBarra}>
-        <View style={styles.tituloContainer}>
-          <Image source={require('../assets/mascote.png')} style={styles.mascoteIcone} />
-          <Text style={[styles.titulo, { color: tema.primaria }]}>Buscar</Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.botaoSelecionar, { backgroundColor: modoSelecao ? tema.primaria : tema.card }]}
-          onPress={() => (modoSelecao ? sairModoSelecao() : setModoSelecao(true))}
-        >
-          <MaterialCommunityIcons
-            name="checkbox-multiple-marked-outline"
-            size={20}
-            color={modoSelecao ? '#FFF' : tema.primaria}
-          />
-          <Text style={{ color: modoSelecao ? '#FFF' : tema.primaria, fontWeight: 'bold', marginLeft: 6 }}>
-            {modoSelecao ? 'Cancelar' : 'Selecionar'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+  const botaoSelecionarTopo = (
+    <TouchableOpacity
+      style={[styles.botaoSelecionar, { backgroundColor: modoSelecao ? tema.primaria : tema.primariaClara }]}
+      onPress={() => (modoSelecao ? sairModoSelecao() : setModoSelecao(true))}
+    >
+      <MaterialCommunityIcons
+        name="checkbox-multiple-marked-outline"
+        size={18}
+        color={modoSelecao ? '#FFF' : tema.primaria}
+      />
+      <Text style={{ color: modoSelecao ? '#FFF' : tema.primaria, fontWeight: 'bold', fontSize: 12, marginLeft: 4 }}>
+        {modoSelecao ? 'Cancelar' : 'Selecionar'}
+      </Text>
+    </TouchableOpacity>
+  );
 
-      <View style={[styles.buscaContainer, { backgroundColor: tema.card }]}>
+  return (
+    <AnimarEntrada style={[styles.container, { backgroundColor: tema.bg }]}>
+      <BannerMascote
+        pose={MASCOTE.curioso}
+        titulo="Buscar"
+        subtitulo="Procure músicas, álbuns e artistas"
+        tema={tema}
+        direita={botaoSelecionarTopo}
+      />
+
+      <View style={[styles.buscaContainer, { backgroundColor: tema.card, borderColor: tema.borda }]}>
         <MaterialCommunityIcons name="magnify" size={24} color={tema.subtexto} />
         <TextInput
           style={[styles.inputBusca, { color: tema.texto }]}
@@ -190,9 +194,14 @@ export default function BuscarItens({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderizarItem}
         ListEmptyComponent={
-          textoBusca.length > 0 ? (
-            <Text style={[styles.textoCentro, { color: tema.subtexto }]}>Nenhum resultado para "{textoBusca}".</Text>
-          ) : null
+          <View style={styles.vazioContainer}>
+            <Image source={MASCOTE.curioso} style={{ width: 115, height: 115, marginBottom: 8 }} />
+            <Text style={[styles.textoCentro, { color: tema.subtexto }]}>
+              {textoBusca.trim().length > 0
+                ? `Nyx procurou por toda parte, mas não achou nada para "${textoBusca}".`
+                : 'Digite algo acima para o Nyx procurar na sua biblioteca!'}
+            </Text>
+          </View>
         }
         contentContainerStyle={{ paddingBottom: modoSelecao ? 110 : 20 }}
         style={styles.lista}
@@ -225,27 +234,24 @@ export default function BuscarItens({ navigation }) {
           </View>
         </View>
       )}
-    </View>
+    </AnimarEntrada>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', paddingTop: 45 },
-  topoBarra: { flexDirection: 'row', width: '90%', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  tituloContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  mascoteIcone: { width: 28, height: 28 },
-  titulo: { fontSize: 24, fontWeight: 'bold' },
-  botaoSelecionar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, elevation: 2 },
-  buscaContainer: { flexDirection: 'row', width: '90%', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginBottom: 15, elevation: 3 },
+  botaoSelecionar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10 },
+  buscaContainer: { flexDirection: 'row', width: '92%', paddingHorizontal: 15, paddingVertical: 12, borderRadius: 14, alignItems: 'center', marginBottom: 14, borderWidth: 1, elevation: 2 },
   inputBusca: { flex: 1, marginLeft: 10, fontSize: 16 },
   lista: { width: '100%', paddingHorizontal: 16 },
-  itemContainer: { flexDirection: 'row', padding: 10, borderRadius: 12, marginBottom: 10, alignItems: 'center', elevation: 2 },
-  capaMiniatura: { width: 48, height: 48, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 12, overflow: 'hidden' },
+  itemContainer: { flexDirection: 'row', padding: 10, borderRadius: 14, marginBottom: 10, alignItems: 'center', borderWidth: 1, elevation: 1 },
+  capaMiniatura: { width: 48, height: 48, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12, overflow: 'hidden' },
   infoContainer: { flex: 1 },
   nomeBusca: { fontSize: 16, fontWeight: 'bold' },
   textoExtra: { fontSize: 13, marginTop: 2 },
   duracaoTexto: { fontSize: 12, fontWeight: 'bold', marginRight: 8 },
-  textoCentro: { fontSize: 15, textAlign: 'center', marginTop: 20 },
+  vazioContainer: { alignItems: 'center', marginTop: 35, paddingHorizontal: 25 },
+  textoCentro: { fontSize: 14, textAlign: 'center', lineHeight: 20 },
   barraMultiSelecao: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 14, borderTopWidth: 1, elevation: 10 },
   cabecalhoSelecao: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   contadorSelecao: { fontSize: 14, fontWeight: 'bold' },

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Modal, FlatList, TouchableOpacity, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Modal, FlatList, TouchableOpacity, PanResponder, Animated } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { extrairTags } from './ExtrairTags';
-import { MusicasContext, formatarTempo } from '../App';
+import { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada } from '../config/config';
 
 const ALTURA_LINHA_FILA = 64;
+const POSES_TOCANDO = [MASCOTE.fones, MASCOTE.som, MASCOTE.voando];
 
 function ItemFilaArrastavel({ item, index, tocandoAgora, tema, onSelect, onRemove, onReorder }) {
   const [deslocamentoY, setDeslocamentoY] = useState(0);
@@ -56,7 +57,7 @@ function ItemFilaArrastavel({ item, index, tocandoAgora, tema, onSelect, onRemov
           <Image source={{ uri: item.tags.artwork }} style={styles.capaFila} />
         ) : (
           <View style={[styles.capaFila, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
-            <MaterialCommunityIcons name="music-note" size={20} color={tema.primaria} />
+            <Image source={MASCOTE.fones} style={{ width: 34, height: 34 }} />
           </View>
         )}
 
@@ -103,10 +104,29 @@ export default function ReproduzirItens() {
   const [nomeAlbum, setNomeAlbum] = useState('Sem Álbum');
   const [capaAlbum, setCapaAlbum] = useState(null);
   const [modalFilaVisivel, setModalFilaVisivel] = useState(false);
+  const [indicePose, setIndicePose] = useState(0);
 
   const source = musicaAtual?.uri && !musicaAtual?.indisponivel ? { uri: musicaAtual.uri } : null;
   const player = useAudioPlayer(source);
   const status = useAudioPlayerStatus(player);
+
+  // Animação contínua de pulsação suave do mascote enquanto a música toca
+  const pulsoAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (status.playing) {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulsoAnim, { toValue: 1.05, duration: 900, useNativeDriver: true }),
+          Animated.timing(pulsoAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      pulsoAnim.setValue(1);
+    }
+  }, [status.playing]);
 
   // Permite fechar a gaveta da fila arrastando a barra superior para baixo
   const gavetaPanResponder = useRef(
@@ -127,7 +147,7 @@ export default function ReproduzirItens() {
     async function carregarMetadados() {
       if (!musicaAtual?.uri) {
         setNomeMusica('Nenhuma música na fila');
-        setNomeArtista('Selecione uma faixa para ouvir');
+        setNomeArtista('Selecione uma faixa para o Nyx tocar');
         setNomeAlbum('');
         setCapaAlbum(null);
         return;
@@ -201,39 +221,73 @@ export default function ReproduzirItens() {
     }
   }, [status.didJustFinish]);
 
+  const poseMascote = !musicaAtual
+    ? MASCOTE.play
+    : status.playing
+      ? POSES_TOCANDO[indicePose % POSES_TOCANDO.length]
+      : MASCOTE.atento;
+
+  const fraseMascote = !musicaAtual
+    ? 'Nyx pronto para dar o Play'
+    : status.playing
+      ? 'Nyx está curtindo o som ♪'
+      : 'Nyx aguardando você soltar o som';
+
   return (
-    <View style={[styles.container, { backgroundColor: tema.bg }]}>
-      <View style={[styles.mascoteTopo, { backgroundColor: tema.card }]}>
-        <Image
-          source={status.playing ? require('../assets/mascote_som.png') : require('../assets/mascote.png')}
-          style={styles.mascoteImg}
-        />
-      </View>
-
-      {musicaAtual && (
+    <AnimarEntrada gatilho={musicaAtual?.uri} style={[styles.container, { backgroundColor: tema.bg }]}>
+      <View style={styles.barraSuperior}>
         <TouchableOpacity
-          style={[styles.botaoOpcoes, { backgroundColor: tema.card }]}
-          onPress={() => abrirMenuOpcoes(musicaAtual)}
+          style={[styles.pilulaMascote, { backgroundColor: tema.card, borderColor: tema.borda }]}
+          onPress={() => setIndicePose((prev) => prev + 1)}
         >
-          <MaterialCommunityIcons name="dots-vertical" size={26} color={tema.primaria} />
+          <Image source={poseMascote} style={styles.iconePilula} />
+          <Text style={[styles.textoPilula, { color: tema.primaria }]}>{fraseMascote}</Text>
         </TouchableOpacity>
-      )}
 
-      <View style={[styles.capa, { backgroundColor: tema.primaria }]}>
-        {capaAlbum ? (
-          <Image source={{ uri: capaAlbum }} style={styles.imagemCapa} />
-        ) : (
-          <MaterialCommunityIcons name="music-circle" size={120} color="white" />
+        {musicaAtual && (
+          <TouchableOpacity
+            style={[styles.botaoOpcoes, { backgroundColor: tema.card }]}
+            onPress={() => abrirMenuOpcoes(musicaAtual)}
+          >
+            <MaterialCommunityIcons name="dots-vertical" size={24} color={tema.primaria} />
+          </TouchableOpacity>
         )}
       </View>
 
-      <View style={styles.infoContainer}>
-        <Text style={[styles.nomeMusica, { color: tema.texto }]} numberOfLines={1}>
-          {nomeMusica}
-        </Text>
-        <Text style={[styles.nomeArtista, { color: tema.subtexto }]} numberOfLines={1}>
-          {nomeArtista} {nomeAlbum ? `• ${nomeAlbum}` : ''}
-        </Text>
+      <View style={styles.palcoCentral}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => setIndicePose((prev) => prev + 1)}
+          style={[styles.capa, { backgroundColor: capaAlbum ? tema.card : tema.primariaClara, borderColor: tema.primaria }]}
+        >
+          {capaAlbum ? (
+            <>
+              <Image source={{ uri: capaAlbum }} style={styles.imagemCapa} />
+              <Animated.View
+                style={[
+                  styles.crachaMascoteCapa,
+                  { backgroundColor: tema.card, borderColor: tema.primaria, transform: [{ scale: pulsoAnim }] },
+                ]}
+              >
+                <Image source={poseMascote} style={styles.imgCrachaMascote} />
+              </Animated.View>
+            </>
+          ) : (
+            <Animated.Image
+              source={poseMascote}
+              style={[styles.mascoteProtagonista, { transform: [{ scale: pulsoAnim }] }]}
+            />
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.infoContainer}>
+          <Text style={[styles.nomeMusica, { color: tema.texto }]} numberOfLines={1}>
+            {nomeMusica}
+          </Text>
+          <Text style={[styles.nomeArtista, { color: tema.subtexto }]} numberOfLines={1}>
+            {nomeArtista} {nomeAlbum ? `• ${nomeAlbum}` : ''}
+          </Text>
+        </View>
       </View>
 
       <View style={styles.containerSlider}>
@@ -289,7 +343,7 @@ export default function ReproduzirItens() {
       </View>
 
       <TouchableOpacity
-        style={[styles.botaoVerFila, { backgroundColor: tema.card }]}
+        style={[styles.botaoVerFila, { backgroundColor: tema.card, borderColor: tema.borda }]}
         onPress={() => setModalFilaVisivel(true)}
       >
         <MaterialCommunityIcons name="playlist-music-outline" size={22} color={tema.primaria} />
@@ -322,46 +376,56 @@ export default function ReproduzirItens() {
                 />
               )}
               ListEmptyComponent={
-                <Text style={{ textAlign: 'center', marginVertical: 30, color: tema.subtexto }}>A fila está vazia.</Text>
+                <View style={styles.filaVazia}>
+                  <Image source={MASCOTE.curioso} style={{ width: 80, height: 80, marginBottom: 8 }} />
+                  <Text style={{ color: tema.subtexto }}>A fila está vazia.</Text>
+                </View>
               }
             />
           </Pressable>
         </Pressable>
       </Modal>
-    </View>
+    </AnimarEntrada>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 35 },
   caixaCentralizada: { justifyContent: 'center', alignItems: 'center' },
-  mascoteTopo: { position: 'absolute', top: 46, left: 22, zIndex: 10, padding: 4, borderRadius: 22, elevation: 3 },
-  mascoteImg: { width: 34, height: 34 },
-  botaoOpcoes: { position: 'absolute', top: 50, right: 25, zIndex: 10, padding: 8, borderRadius: 20, elevation: 3 },
-  capa: { alignItems: 'center', justifyContent: 'center', width: 270, height: 270, borderRadius: 35, overflow: 'hidden', marginBottom: 20, elevation: 6 },
+  barraSuperior: { position: 'absolute', top: 45, width: '88%', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 },
+  pilulaMascote: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 24, borderWidth: 1, elevation: 2, gap: 8 },
+  iconePilula: { width: 28, height: 28 },
+  textoPilula: { fontSize: 13, fontWeight: 'bold' },
+  botaoOpcoes: { padding: 8, borderRadius: 20, elevation: 2 },
+  palcoCentral: { alignItems: 'center', width: '100%', marginTop: 30 },
+  capa: { alignItems: 'center', justifyContent: 'center', width: 255, height: 255, borderRadius: 36, overflow: 'hidden', marginBottom: 18, borderWidth: 2, elevation: 6 },
   imagemCapa: { width: '100%', height: '100%' },
-  infoContainer: { alignItems: 'center', width: '85%', marginBottom: 5 },
+  mascoteProtagonista: { width: 210, height: 210 },
+  crachaMascoteCapa: { position: 'absolute', bottom: 10, right: 10, width: 58, height: 58, borderRadius: 29, justifyContent: 'center', alignItems: 'center', borderWidth: 2, elevation: 5 },
+  imgCrachaMascote: { width: 48, height: 48 },
+  infoContainer: { alignItems: 'center', width: '85%', marginBottom: 4 },
   nomeMusica: { fontSize: 22, fontWeight: 'bold', textAlign: 'center' },
   nomeArtista: { fontSize: 15, marginTop: 4, textAlign: 'center' },
-  containerSlider: { width: '85%', justifyContent: 'center', marginTop: 5, marginBottom: 15 },
+  containerSlider: { width: '85%', justifyContent: 'center', marginTop: 4, marginBottom: 14 },
   slider: { width: '100%', height: 40 },
   tempoContainer: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 15, marginTop: -8 },
   textoTempo: { fontSize: 12 },
-  containerControles: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 22, marginBottom: 25 },
+  containerControles: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 22, marginBottom: 22 },
   pause: { alignItems: 'center', justifyContent: 'center', width: 70, height: 70, borderRadius: 35, elevation: 4 },
   controles: { alignItems: 'center', justifyContent: 'center', width: 52, height: 52, borderRadius: 26, elevation: 3 },
   botaoPressionado: { opacity: 0.8, transform: [{ scale: 0.92 }] },
-  botaoVerFila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20, elevation: 2, gap: 8 },
+  botaoVerFila: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 20, borderWidth: 1, elevation: 2, gap: 8 },
   textoVerFila: { fontWeight: 'bold', fontSize: 14 },
   modalFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   modalCard: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingBottom: 25, maxHeight: '75%' },
   alcaGavetaContainer: { alignItems: 'center', paddingVertical: 14 },
   barraArrasteTopo: { width: 45, height: 5, borderRadius: 3, marginBottom: 10, opacity: 0.5 },
   modalTitulo: { fontSize: 18, fontWeight: 'bold' },
+  filaVazia: { alignItems: 'center', marginVertical: 25 },
   filaItem: { flexDirection: 'row', alignItems: 'center', height: ALTURA_LINHA_FILA, borderBottomWidth: 1, borderRadius: 8, paddingHorizontal: 4 },
   alcaArrastarItem: { paddingHorizontal: 8, justifyContent: 'center', height: '100%' },
   filaConteudoClicavel: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  capaFila: { width: 42, height: 42, borderRadius: 6 },
+  capaFila: { width: 42, height: 42, borderRadius: 8, overflow: 'hidden' },
   filaTexto: { fontSize: 15 },
   filaArtista: { fontSize: 12, marginTop: 2 },
 });

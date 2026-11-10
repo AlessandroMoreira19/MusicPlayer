@@ -1,8 +1,7 @@
 import React, { useContext, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { MusicasContext, formatarTempo } from '../App';
-import firebase from '../config/config';
+import firebase, { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada } from '../config/config';
 import { RenderizarCapaPlaylist, ModalEscolherCapa } from './Playlists';
 
 export default function TelaPlaylist({ route, navigation }) {
@@ -140,9 +139,9 @@ export default function TelaPlaylist({ route, navigation }) {
       <TouchableOpacity
         style={[
           styles.itemContainer,
-          { backgroundColor: tema.card },
+          { backgroundColor: tema.card, borderColor: estaSelecionada ? tema.primaria : tema.borda },
           item.indisponivel && { opacity: 0.55 },
-          estaSelecionada && { borderColor: tema.primaria, borderWidth: 2 },
+          estaSelecionada && { borderWidth: 2 },
         ]}
         onPress={() => tocarMusica(item)}
         onLongPress={() => !item.indisponivel && !modoSelecao && abrirMenuOpcoes(item)}
@@ -161,11 +160,11 @@ export default function TelaPlaylist({ route, navigation }) {
           <Image source={{ uri: capaUri }} style={styles.capaMusica} />
         ) : (
           <View style={[styles.capaMusica, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
-            <MaterialCommunityIcons
-              name={item.indisponivel ? 'alert-circle-outline' : 'music'}
-              size={24}
-              color={item.indisponivel ? '#FF6B6B' : tema.primaria}
-            />
+            {item.indisponivel ? (
+              <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#FF6B6B" />
+            ) : (
+              <Image source={MASCOTE.fones} style={{ width: 42, height: 42 }} />
+            )}
           </View>
         )}
 
@@ -191,7 +190,7 @@ export default function TelaPlaylist({ route, navigation }) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: tema.bg }]}>
+    <AnimarEntrada style={[styles.container, { backgroundColor: tema.bg }]}>
       <View style={[styles.header, { backgroundColor: tema.card }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.botaoVoltar}>
           <MaterialCommunityIcons name="arrow-left" size={28} color={tema.texto} />
@@ -260,7 +259,12 @@ export default function TelaPlaylist({ route, navigation }) {
         keyExtractor={(item) => item.firebaseKey}
         renderItem={renderizarItem}
         ListEmptyComponent={
-          <Text style={[styles.vazioText, { color: tema.subtexto }]}>Esta playlist ainda não tem músicas.</Text>
+          <View style={styles.vazioContainer}>
+            <Image source={MASCOTE.curioso} style={{ width: 100, height: 100, marginBottom: 8 }} />
+            <Text style={[styles.vazioText, { color: tema.subtexto }]}>
+              Esta playlist ainda não tem músicas. Adicione faixas pela biblioteca ou busca!
+            </Text>
+          </View>
         }
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: modoSelecao ? 90 : 20 }}
       />
@@ -355,7 +359,7 @@ export default function TelaPlaylist({ route, navigation }) {
         tema={tema}
         titulo="Alterar Capa"
       />
-    </View>
+    </AnimarEntrada>
   );
 }
 
@@ -370,20 +374,21 @@ const styles = StyleSheet.create({
   botoesPlayHeader: { flexDirection: 'row', gap: 10, marginTop: 10 },
   botaoAcaoHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, gap: 4, elevation: 2 },
   textoBotaoHeader: { fontWeight: 'bold', fontSize: 13 },
-  itemContainer: { flexDirection: 'row', padding: 10, borderRadius: 12, marginBottom: 10, alignItems: 'center', elevation: 2 },
-  capaMusica: { width: 50, height: 50, borderRadius: 8, marginRight: 14 },
+  itemContainer: { flexDirection: 'row', padding: 10, borderRadius: 14, marginBottom: 10, alignItems: 'center', borderWidth: 1, elevation: 1 },
+  capaMusica: { width: 50, height: 50, borderRadius: 10, marginRight: 14, overflow: 'hidden' },
   infoContainer: { flex: 1 },
   nomeMusica: { fontSize: 15, fontWeight: 'bold' },
   nomeArtista: { fontSize: 13, marginTop: 3 },
   duracaoContainer: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8 },
   textoTempo: { fontSize: 12, fontWeight: 'bold' },
-  vazioText: { textAlign: 'center', marginTop: 20, fontSize: 15 },
+  vazioContainer: { alignItems: 'center', marginTop: 30, paddingHorizontal: 25 },
+  vazioText: { textAlign: 'center', fontSize: 14, lineHeight: 20 },
   barraMultiSelecao: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 14, borderTopWidth: 1, elevation: 10 },
   cabecalhoSelecao: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   contadorSelecao: { fontSize: 13, fontWeight: 'bold' },
   botaoApagarLote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 8 },
   modalFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalCard: { width: '90%', borderRadius: 15, padding: 20 },
+  modalCard: { width: '90%', borderRadius: 20, padding: 20 },
   modalTitulo: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
   opcaoItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, gap: 12 },
   opcaoTexto: { fontSize: 16, fontWeight: '500' },

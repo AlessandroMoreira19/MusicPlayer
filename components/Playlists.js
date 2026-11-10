@@ -2,21 +2,23 @@ import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Image, Modal, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { MusicasContext } from '../App';
-import firebase from '../config/config';
+import firebase, { MusicasContext, MASCOTE, AnimarEntrada, BannerMascote } from '../config/config';
 
 export const CAPAS_PRE_SELECIONADAS = [
-  { id: 'preset_nyx', nome: 'Mascote Nyx', source: require('../assets/mascote.png') },
-  { id: 'asset_icon', nome: 'Logo App', source: require('../assets/icon.png') },
+  { id: 'preset_nyx_fones', nome: 'Nyx Fones', source: MASCOTE.fones },
+  { id: 'preset_nyx_carinho', nome: 'Nyx Coração', source: MASCOTE.carinho },
+  { id: 'preset_nyx_som', nome: 'Nyx Som', source: MASCOTE.som },
+  { id: 'preset_nyx_voando', nome: 'Nyx Voando', source: MASCOTE.voando },
   { id: 'preset_rock', nome: 'Rock / Metal', icone: 'guitar-electric', cor: '#B71C1C' },
   { id: 'preset_hiphop', nome: 'Hip-Hop / Trap', icone: 'microphone-variant', cor: '#1A237E' },
   { id: 'preset_treino', nome: 'Treino / Gym', icone: 'dumbbell', cor: '#E65100' },
   { id: 'preset_chill', nome: 'Chill / Lo-Fi', icone: 'coffee', cor: '#004D40' },
+  { id: 'asset_icon', nome: 'Logo App', source: require('../assets/icon.png') },
 ];
 
-// Exibe a capa da playlist por prioridade: foto da galeria -> preset -> capa da 1ª música local -> ícone padrão
+// Exibe a capa da playlist por prioridade: galeria -> preset -> capa da 1ª música local -> mascote Nyx
 export function RenderizarCapaPlaylist({ capaInfo, musicasDaPlaylist, musicasLocais, tamanho = 54, tema }) {
-  const estiloImg = { width: tamanho, height: tamanho, borderRadius: 10 };
+  const estiloImg = { width: tamanho, height: tamanho, borderRadius: 12 };
 
   if (capaInfo?.tipo === 'galeria' && capaInfo.uri) {
     return <Image source={{ uri: capaInfo.uri }} style={estiloImg} />;
@@ -24,7 +26,13 @@ export function RenderizarCapaPlaylist({ capaInfo, musicasDaPlaylist, musicasLoc
 
   if (capaInfo?.tipo === 'preset') {
     const preset = CAPAS_PRE_SELECIONADAS.find((p) => p.id === capaInfo.id);
-    if (preset?.source) return <Image source={preset.source} style={estiloImg} />;
+    if (preset?.source) {
+      return (
+        <View style={[estiloImg, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
+          <Image source={preset.source} style={{ width: tamanho * 0.88, height: tamanho * 0.88 }} />
+        </View>
+      );
+    }
     if (preset) {
       return (
         <View style={[estiloImg, styles.caixaCentralizada, { backgroundColor: preset.cor }]}>
@@ -43,7 +51,7 @@ export function RenderizarCapaPlaylist({ capaInfo, musicasDaPlaylist, musicasLoc
 
   return (
     <View style={[estiloImg, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
-      <MaterialCommunityIcons name="playlist-music" size={tamanho * 0.55} color={tema.primaria} />
+      <Image source={MASCOTE.carinho} style={{ width: tamanho * 0.85, height: tamanho * 0.85 }} />
     </View>
   );
 }
@@ -68,7 +76,6 @@ export function ModalEscolherCapa({ visivel, aoFechar, aoEscolherCapa, tema, tit
 
       if (!resultado.canceled && resultado.assets?.[0]) {
         const asset = resultado.assets[0];
-        // Salva em Base64 comprimido para sincronizar a capa da playlist no Firebase
         const uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
         aoEscolherCapa({ tipo: 'galeria', uri });
         aoFechar();
@@ -87,7 +94,7 @@ export function ModalEscolherCapa({ visivel, aoFechar, aoEscolherCapa, tema, tit
             <Text style={styles.textoGaleria}>Escolher da Galeria</Text>
           </TouchableOpacity>
 
-          <Text style={[styles.subtituloModal, { color: tema.subtexto }]}>Ou escolha uma capa pré-selecionada:</Text>
+          <Text style={[styles.subtituloModal, { color: tema.subtexto }]}>Ou escolha uma capa do Nyx / Estilo:</Text>
           <View style={styles.gradePresets}>
             {CAPAS_PRE_SELECIONADAS.map((p) => (
               <TouchableOpacity
@@ -99,13 +106,17 @@ export function ModalEscolherCapa({ visivel, aoFechar, aoEscolherCapa, tema, tit
                 }}
               >
                 {p.source ? (
-                  <Image source={p.source} style={styles.imgPreset} />
+                  <View style={[styles.imgPreset, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
+                    <Image source={p.source} style={{ width: 54, height: 54 }} />
+                  </View>
                 ) : (
                   <View style={[styles.imgPreset, styles.caixaCentralizada, { backgroundColor: p.cor }]}>
                     <MaterialCommunityIcons name={p.icone} size={28} color="#FFF" />
                   </View>
                 )}
-                <Text style={{ fontSize: 11, color: tema.texto, marginTop: 4 }}>{p.nome}</Text>
+                <Text style={{ fontSize: 11, color: tema.texto, marginTop: 4 }} numberOfLines={1}>
+                  {p.nome}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -136,12 +147,16 @@ export default function Playlists({ navigation }) {
     } catch (e) {}
   };
 
+  const nomesPlaylists = Object.keys(playlistsGlobais);
+
   return (
-    <View style={[styles.container, { backgroundColor: tema.bg }]}>
-      <View style={styles.tituloTopo}>
-        <Image source={require('../assets/mascote.png')} style={styles.mascoteIcone} />
-        <Text style={[styles.titulo, { color: tema.primaria }]}>Minhas Playlists</Text>
-      </View>
+    <AnimarEntrada style={[styles.container, { backgroundColor: tema.bg }]}>
+      <BannerMascote
+        pose={MASCOTE.carinho}
+        titulo="Minhas Playlists"
+        subtitulo={`${nomesPlaylists.length} coleção(ões) guardada(s) pelo Nyx`}
+        tema={tema}
+      />
 
       <View style={styles.criarContainer}>
         <TouchableOpacity
@@ -156,7 +171,7 @@ export default function Playlists({ navigation }) {
         </TouchableOpacity>
 
         <TextInput
-          style={[styles.input, { backgroundColor: tema.card, color: tema.texto }]}
+          style={[styles.input, { backgroundColor: tema.card, color: tema.texto, borderColor: tema.borda }]}
           placeholder="Nome da nova playlist..."
           placeholderTextColor={tema.subtexto}
           value={novaPlaylist}
@@ -169,14 +184,14 @@ export default function Playlists({ navigation }) {
       </View>
 
       <FlatList
-        data={Object.keys(playlistsGlobais)}
+        data={nomesPlaylists}
         keyExtractor={(item) => item}
         renderItem={({ item }) => {
           const dadosPl = playlistsGlobais[item];
           const quantidade = dadosPl?.musicas ? Object.keys(dadosPl.musicas).length : 0;
           return (
             <TouchableOpacity
-              style={[styles.itemPlaylist, { backgroundColor: tema.card }]}
+              style={[styles.itemPlaylist, { backgroundColor: tema.card, borderColor: tema.borda }]}
               onPress={() => navigation.navigate('TelaPlaylist', { nomePlaylist: item })}
             >
               <RenderizarCapaPlaylist
@@ -195,9 +210,12 @@ export default function Playlists({ navigation }) {
           );
         }}
         ListEmptyComponent={
-          <Text style={[styles.vazioText, { color: tema.subtexto }]}>
-            Nenhuma playlist criada. Crie a primeira acima!
-          </Text>
+          <View style={styles.vazioContainer}>
+            <Image source={MASCOTE.carinho} style={{ width: 110, height: 110, marginBottom: 8 }} />
+            <Text style={[styles.vazioText, { color: tema.subtexto }]}>
+              Nenhuma playlist criada ainda. Crie sua primeira coleção com o Nyx acima!
+            </Text>
+          </View>
         }
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 20 }}
       />
@@ -208,31 +226,29 @@ export default function Playlists({ navigation }) {
         aoEscolherCapa={setCapaEscolhida}
         tema={tema}
       />
-    </View>
+    </AnimarEntrada>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, paddingTop: 45 },
   caixaCentralizada: { justifyContent: 'center', alignItems: 'center' },
-  tituloTopo: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginBottom: 20 },
-  mascoteIcone: { width: 30, height: 30 },
-  titulo: { fontSize: 24, fontWeight: 'bold' },
-  criarContainer: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 20, gap: 8 },
-  botaoCapaCriar: { width: 50, height: 50, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, elevation: 2, overflow: 'hidden' },
-  input: { flex: 1, borderRadius: 10, paddingHorizontal: 15, fontSize: 16, elevation: 2 },
-  botaoCriar: { width: 50, height: 50, borderRadius: 10, justifyContent: 'center', alignItems: 'center', elevation: 2 },
-  itemPlaylist: { flexDirection: 'row', padding: 12, borderRadius: 12, marginBottom: 10, alignItems: 'center', elevation: 2 },
+  criarContainer: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 16, gap: 8 },
+  botaoCapaCriar: { width: 50, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, elevation: 2, overflow: 'hidden' },
+  input: { flex: 1, borderRadius: 12, paddingHorizontal: 15, fontSize: 16, borderWidth: 1, elevation: 1 },
+  botaoCriar: { width: 50, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center', elevation: 2 },
+  itemPlaylist: { flexDirection: 'row', padding: 12, borderRadius: 14, marginBottom: 10, alignItems: 'center', borderWidth: 1, elevation: 1 },
   nomePlaylist: { fontSize: 17, fontWeight: 'bold' },
   quantidadeText: { fontSize: 13, marginTop: 3 },
-  vazioText: { textAlign: 'center', marginTop: 20, fontSize: 15 },
+  vazioContainer: { alignItems: 'center', marginTop: 30, paddingHorizontal: 20 },
+  vazioText: { textAlign: 'center', fontSize: 14, lineHeight: 20 },
   modalFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalCard: { width: '90%', borderRadius: 15, padding: 20 },
+  modalCard: { width: '90%', borderRadius: 20, padding: 20 },
   modalTitulo: { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 15 },
-  botaoGaleria: { flexDirection: 'row', padding: 14, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+  botaoGaleria: { flexDirection: 'row', padding: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
   textoGaleria: { color: '#FFF', fontWeight: 'bold', marginLeft: 8 },
   subtituloModal: { fontSize: 13, fontWeight: 'bold', marginBottom: 10 },
   gradePresets: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
-  itemPreset: { alignItems: 'center', width: '30%', marginBottom: 10 },
-  imgPreset: { width: 64, height: 64, borderRadius: 12 },
+  itemPreset: { alignItems: 'center', width: '30%', marginBottom: 8 },
+  imgPreset: { width: 62, height: 62, borderRadius: 14, overflow: 'hidden' },
 });
