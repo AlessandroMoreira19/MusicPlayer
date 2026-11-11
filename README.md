@@ -40,11 +40,14 @@ O aplicativo permite importar arquivos `.mp3` locais do dispositivo — extraind
 
 ---
 
+<<<<<<< HEAD
 ## 📸 Demonstração
 
 > *(Espaço reservado para GIF/vídeo ou capturas de tela do aplicativo em funcionamento)*
 
 ---
+=======
+>>>>>>> abb4d5cbe839575ac11fbd9a2f8f53ad3d413be9
 
 ## 🚀 Instalação e Execução
 
