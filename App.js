@@ -3,16 +3,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, Text, ActivityIndicator, Modal, TouchableOpacity, FlatList, StyleSheet, Switch, Image } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import firebase, {
-  MusicasContext,
-  MASCOTE,
-  PALETAS_CORES,
-  formatarTempo,
-  AnimarEntrada,
-  BannerMascote,
-} from './config/config';
+import firebase, { MusicasContext, MASCOTE, PALETAS_CORES, vibrar } from './config/config';
+import { extrairTags } from './components/ExtrairTags';
 
 import Login from './components/Login';
 import Cadastro from './components/Cadastro';
@@ -21,11 +16,9 @@ import Playlists from './components/Playlists';
 import TelaPlaylist from './components/TelaPlaylist';
 import BuscarItens from './components/BuscarItens';
 import ListarItens from './components/ListarItens';
-import Conquistas from './components/Conquistas';
+import Estatisticas from './components/Estatisticas';
 import TelaAlbum from './components/TelaAlbum';
 import TelaArtista from './components/TelaArtista';
-
-export { MusicasContext, MASCOTE, PALETAS_CORES, formatarTempo, AnimarEntrada, BannerMascote };
 
 const NavegacaoTabs = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -56,9 +49,9 @@ function AppTabs() {
   const icones = {
     Reproduzir: 'play-circle',
     Playlists: 'playlist-music',
-    Listar: 'music-box-multiple',
-    Conquistas: 'trophy',
     Buscar: 'magnify',
+    Listar: 'music-box-multiple',
+    Estatísticas: 'chart-bar',
   };
 
   return (
@@ -68,11 +61,9 @@ function AppTabs() {
         sceneStyle: { backgroundColor: tema.bg },
         tabBarActiveTintColor: tema.primaria,
         tabBarInactiveTintColor: tema.subtexto,
-        tabBarStyle: { backgroundColor: tema.card, borderTopColor: tema.borda, height: 60, paddingBottom: 6 },
-        tabBarIcon: ({ color, size, focused }) => (
-          <View style={focused ? [styles.iconeTabAtivo, { backgroundColor: tema.primariaClara }] : null}>
-            <MaterialCommunityIcons name={icones[route.name] || 'music'} size={size} color={color} />
-          </View>
+        tabBarStyle: { backgroundColor: tema.card, borderTopColor: tema.borda },
+        tabBarIcon: ({ color, size }) => (
+          <MaterialCommunityIcons name={icones[route.name] || 'music'} size={size} color={color} />
         ),
       })}
     >
@@ -80,7 +71,7 @@ function AppTabs() {
       <NavegacaoTabs.Screen name="Playlists" component={PlaylistsNavegacao} />
       <NavegacaoTabs.Screen name="Buscar" component={BuscarNavegacao} />
       <NavegacaoTabs.Screen name="Listar" component={ListarItens} />
-      <NavegacaoTabs.Screen name="Conquistas" component={Conquistas} />
+      <NavegacaoTabs.Screen name="Estatísticas" component={Estatisticas} />
     </NavegacaoTabs.Navigator>
   );
 }
@@ -116,17 +107,19 @@ export default function App() {
 
   const musicaAtual = indiceFila >= 0 && indiceFila < fila.length ? fila[indiceFila] : null;
 
-  // Remove da fila músicas que foram apagadas da biblioteca local
+  // Remove da fila músicas que foram apagadas da biblioteca local mantendo o índice correto
   useEffect(() => {
     if (fila.length === 0) return;
+    const removidosAntes = fila.slice(0, indiceFila).filter((m) => !musicas.some((lib) => lib.uri === m.uri)).length;
     const novaFila = fila.filter((m) => musicas.some((lib) => lib.uri === m.uri));
     if (novaFila.length !== fila.length) {
       setFila(novaFila);
-      if (indiceFila >= novaFila.length) setIndiceFila(novaFila.length - 1);
+      setIndiceFila(novaFila.length === 0 ? -1 : Math.min(Math.max(0, indiceFila - removidosAntes), novaFila.length - 1));
     }
   }, [musicas]);
 
   // Carrega biblioteca e preferências visuais em paralelo ao iniciar
+  // Referência Promise.all: https://www.w3schools.com/jsref/jsref_promise_all.asp
   useEffect(() => {
     async function carregarDadosLocais() {
       try {
@@ -137,7 +130,11 @@ export default function App() {
         ]);
         if (temaSalvo !== null) setTemaEscuro(JSON.parse(temaSalvo));
         if (corSalva !== null) setCorPrimaria(corSalva);
-        if (musicasSalvas !== null) setMusicas(JSON.parse(musicasSalvas));
+        if (musicasSalvas !== null) {
+          const lista = JSON.parse(musicasSalvas);
+          setMusicas(lista);
+          recarregarCapas(lista);
+        }
       } catch (e) {
         console.warn('Erro ao carregar dados locais:', e);
       } finally {
@@ -146,6 +143,30 @@ export default function App() {
     }
     carregarDadosLocais();
   }, []);
+
+  // As capas em Base64 não são salvas no AsyncStorage (limite de espaço), então são relidas dos MP3 em segundo plano.
+  // Músicas do mesmo álbum reaproveitam a capa já encontrada, evitando ler o mesmo arquivo várias vezes.
+  const recarregarCapas = async (lista) => {
+    const capasPorUri = {};
+    const capasPorAlbum = {};
+    for (const item of lista) {
+      if (item.tags?.artwork) continue;
+      const album = item.tags?.album;
+      if (album && album !== 'Sem Álbum' && capasPorAlbum[album]) {
+        capasPorUri[item.uri] = capasPorAlbum[album];
+        continue;
+      }
+      const tags = await extrairTags(item.uri, item.name);
+      if (tags.artwork) {
+        capasPorUri[item.uri] = tags.artwork;
+        if (album) capasPorAlbum[album] = tags.artwork;
+      }
+    }
+    if (Object.keys(capasPorUri).length === 0) return;
+    setMusicas((atuais) =>
+      atuais.map((m) => (capasPorUri[m.uri] ? { ...m, tags: { ...m.tags, artwork: capasPorUri[m.uri] } } : m))
+    );
+  };
 
   // Persiste a lista local (omite capas em Base64 para não exceder o limite do AsyncStorage)
   useEffect(() => {
@@ -183,6 +204,14 @@ export default function App() {
     try {
       await AsyncStorage.setItem('preferencia_cor_primaria', cor);
     } catch (e) {}
+  };
+
+  const sairDaConta = () => {
+    vibrar(40);
+    setModalTemaVisivel(false);
+    setFila([]);
+    setIndiceFila(-1);
+    firebase.auth().signOut();
   };
 
   // Cruza metadados da nuvem (Firebase) com o arquivo MP3 físico presente neste aparelho
@@ -240,6 +269,8 @@ export default function App() {
     const filaFinal = listaItens.map(formatarItemParaFila).filter((m) => !m.indisponivel);
     if (filaFinal.length === 0) return;
 
+    // Embaralhamento Fisher-Yates para reprodução aleatória
+    // Referência: https://www.w3schools.com/js/js_array_sort.asp
     if (aleatorio) {
       for (let i = filaFinal.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -262,6 +293,8 @@ export default function App() {
       setIndiceFila(0);
     } else {
       const novaFila = [...fila];
+      // splice insere os novos itens logo após a música atual sem apagar nenhum elemento
+      // Referência: https://www.w3schools.com/jsref/jsref_splice.asp
       novaFila.splice(indiceFila + 1, 0, ...formatados);
       setFila(novaFila);
     }
@@ -307,12 +340,14 @@ export default function App() {
   };
 
   const abrirMenuOpcoes = (itemOuArray, irDiretoParaPlaylist = false) => {
+    vibrar(40);
     setMusicasMenu(Array.isArray(itemOuArray) ? itemOuArray : [itemOuArray]);
     setExibirEscolherPlaylist(irDiretoParaPlaylist);
   };
 
   const salvarMusicasNaPlaylist = (nomePlaylist) => {
     if (musicasMenu.length === 0 || !usuario) return;
+    vibrar(35);
     const refMusicas = firebase.database().ref(`users/${usuario.uid}/playlists/${nomePlaylist}/musicas`);
 
     musicasMenu.forEach((item) => {
@@ -336,6 +371,8 @@ export default function App() {
       const arrayStats = JSON.parse(statsGuardados);
       if (arrayStats.length === 0) return;
 
+      // Remove caracteres proibidos em caminhos do Firebase Realtime Database (. # $ [ ] /)
+      // Referência: https://www.w3schools.com/jsref/jsref_replace.asp
       const limparChave = (txt, padrao) => (txt || '').replace(/[.#$\[\]\/]/g, '').trim() || padrao;
       const agregacao = { artistas: {}, albuns: {}, musicas: {}, tempoMensal: {} };
 
@@ -360,6 +397,8 @@ export default function App() {
         agregacao.tempoMensal[mesAno] = (agregacao.tempoMensal[mesAno] || 0) + duracao;
       });
 
+      // ServerValue.increment soma o valor direto no servidor do Firebase sem sobrescrever o que já existia
+      // Referência: https://firebase.google.com/docs/database/web/read-and-write#atomic_server-side_increments
       const inc = firebase.database.ServerValue.increment;
       const updates = {};
 
@@ -379,7 +418,7 @@ export default function App() {
         updates[`tempoMensal/${mesAno}`] = inc(segs);
       });
 
-      await firebase.database().ref(`users/${uid}/conquistas`).update(updates);
+      await firebase.database().ref(`users/${uid}/estatisticas`).update(updates);
       await AsyncStorage.removeItem('estatisticas_pendentes');
     } catch (e) {}
   };
@@ -421,6 +460,7 @@ export default function App() {
   if (carregandoAuth || !listaCarregada) {
     return (
       <View style={[styles.carregando, { backgroundColor: tema.bg }]}>
+        <StatusBar style={temaEscuro ? 'light' : 'dark'} />
         <Image source={MASCOTE.voando} style={styles.mascoteCarregando} />
         <ActivityIndicator size="large" color={tema.primaria} />
         <Text style={[styles.textoCarregando, { color: tema.subtexto }]}>Nyx está preparando seu som...</Text>
@@ -438,12 +478,14 @@ export default function App() {
   return (
     <MusicasContext.Provider
       value={{
-        musicas, setMusicas, usuario, playlistsGlobais, resolverMusicaLocal, abrirMenuOpcoes,
+        musicas, setMusicas, usuario, sairDaConta, playlistsGlobais, resolverMusicaLocal, abrirMenuOpcoes, sincronizarEstatisticas,
         fila, indiceFila, setIndiceFila, musicaAtual,
         tocarAgora, tocarLista, tocarDeProximo, adicionarAoFimDaFila, reordenarFila, avancarMusica, voltarMusica, removerDaFila,
         tema, temaEscuro, alternarTemaEscuro, corPrimaria, escolherCorPrimaria, setModalTemaVisivel,
       }}
     >
+      {/* Deixa relógio e bateria claros no modo escuro e escuros no modo claro */}
+      <StatusBar style={temaEscuro ? 'light' : 'dark'} />
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
           {usuario ? (
@@ -544,7 +586,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   carregando: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
-  iconeTabAtivo: { paddingHorizontal: 12, paddingVertical: 2, borderRadius: 14 },
   mascoteCarregando: { width: 110, height: 110 },
   textoCarregando: { fontSize: 15, fontWeight: '600' },
   modalFundo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 },

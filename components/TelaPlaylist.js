@@ -1,7 +1,7 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Modal, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import firebase, { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada } from '../config/config';
+import firebase, { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada, confirmarAcao, exibirAviso, vibrar } from '../config/config';
 import { RenderizarCapaPlaylist, ModalEscolherCapa } from './Playlists';
 
 export default function TelaPlaylist({ route, navigation }) {
@@ -29,6 +29,7 @@ export default function TelaPlaylist({ route, navigation }) {
   const musicasFirebase = dadosPlaylist.musicas || {};
 
   // Vincula cada música da playlist no Firebase com o arquivo MP3 deste dispositivo
+  // Referência Object.entries: https://www.w3schools.com/jsref/jsref_object_entries.asp
   const listaProcessada = Object.entries(musicasFirebase).map(([firebaseKey, itemFb]) => {
     const musicaLocal = resolverMusicaLocal(itemFb);
     return {
@@ -53,7 +54,7 @@ export default function TelaPlaylist({ route, navigation }) {
     }
 
     if (item.indisponivel) {
-      Alert.alert('Música Indisponível', 'Este arquivo de áudio não foi encontrado no armazenamento deste dispositivo.');
+      exibirAviso('Música Indisponível', 'Este arquivo de áudio não foi encontrado no armazenamento deste dispositivo.');
       return;
     }
     tocarAgora(item, disponiveis);
@@ -67,32 +68,27 @@ export default function TelaPlaylist({ route, navigation }) {
 
   const removerMusicaUnica = (firebaseKey) => {
     if (!usuario) return;
+    vibrar(40);
     firebase.database().ref(`users/${usuario.uid}/playlists/${nomeAtual}/musicas/${firebaseKey}`).remove();
   };
 
   const apagarSelecionadasEmLote = () => {
     if (!usuario || selecionadas.length === 0) return;
-    Alert.alert(
+    confirmarAcao(
       'Remover da Playlist',
       `Deseja remover as ${selecionadas.length} músicas selecionadas desta playlist?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Remover',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const updates = {};
-              selecionadas.forEach((key) => {
-                updates[`users/${usuario.uid}/playlists/${nomeAtual}/musicas/${key}`] = null;
-              });
-              await firebase.database().ref().update(updates);
-            } catch (e) {}
-            setModoSelecao(false);
-            setSelecionadas([]);
-          },
-        },
-      ]
+      async () => {
+        try {
+          vibrar(50);
+          const updates = {};
+          selecionadas.forEach((key) => {
+            updates[`users/${usuario.uid}/playlists/${nomeAtual}/musicas/${key}`] = null;
+          });
+          await firebase.database().ref().update(updates);
+        } catch (e) {}
+        setModoSelecao(false);
+        setSelecionadas([]);
+      }
     );
   };
 
@@ -101,6 +97,10 @@ export default function TelaPlaylist({ route, navigation }) {
     const limpo = novoNomeInput.trim().replace(/[.#$\[\]\/]/g, '');
     if (!limpo || limpo === nomeAtual || !usuario) {
       setModalRenomearVisivel(false);
+      return;
+    }
+    if (playlistsGlobais[limpo]) {
+      exibirAviso('Nome já usado', `Você já tem uma playlist chamada "${limpo}". Escolha outro nome.`);
       return;
     }
     try {
@@ -119,8 +119,11 @@ export default function TelaPlaylist({ route, navigation }) {
   const apagarPlaylistInteira = () => {
     setMenu3PontosVisivel(false);
     if (!usuario) return;
-    firebase.database().ref(`users/${usuario.uid}/playlists/${nomeAtual}`).remove();
-    navigation.goBack();
+    confirmarAcao('Apagar Playlist', `Deseja apagar a playlist "${nomeAtual}" e todas as suas músicas?`, () => {
+      vibrar(50);
+      firebase.database().ref(`users/${usuario.uid}/playlists/${nomeAtual}`).remove();
+      navigation.goBack();
+    });
   };
 
   const salvarNovaCapa = (novaCapa) => {

@@ -25,14 +25,14 @@ function SecaoRanking({ titulo, itens, iconeDestaque, corDestaque, tema }) {
   );
 }
 
-export default function Conquistas() {
+export default function Estatisticas() {
   const { usuario, tema } = useContext(MusicasContext);
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     if (!usuario) return;
-    const ref = firebase.database().ref(`users/${usuario.uid}/conquistas`);
+    const ref = firebase.database().ref(`users/${usuario.uid}/estatisticas`);
     const listener = ref.on('value', (snapshot) => {
       setDados(snapshot.exists() ? snapshot.val() : null);
       setCarregando(false);
@@ -61,6 +61,8 @@ export default function Conquistas() {
     );
   }
 
+  // Ordena do maior para o menor (sort), pega os 5 primeiros (slice) e soma os segundos totais (reduce)
+  // Referências: https://www.w3schools.com/jsref/jsref_sort.asp e https://www.w3schools.com/jsref/jsref_reduce.asp
   const topMusicas = Object.values(dados.musicas || {})
     .sort((a, b) => b.reproducoes - a.reproducoes)
     .slice(0, 5)
@@ -79,7 +81,11 @@ export default function Conquistas() {
     .map((al) => ({ nome: al.nome, detalhe: `${al.reproducoes} reproduções` }));
 
   const tempoTotalSegundos = Object.values(dados.tempoMensal || {}).reduce((acc, s) => acc + s, 0);
-  const tempoTotalHoras = (tempoTotalSegundos / 3600).toFixed(1);
+  // Abaixo de 1 hora mostra em minutos (ex: "6 min"), acima mostra em horas (ex: "1.5 Horas")
+  const tempoTotalTexto =
+    tempoTotalSegundos < 3600
+      ? `${Math.round(tempoTotalSegundos / 60)} min`
+      : `${(tempoTotalSegundos / 3600).toFixed(1)} Horas`;
 
   return (
     <AnimarEntrada style={{ flex: 1, backgroundColor: tema.bg }}>
@@ -89,7 +95,7 @@ export default function Conquistas() {
       >
         <BannerMascote
           pose={MASCOTE.voando}
-          titulo="Conquistas e Estatísticas"
+          titulo="Estatísticas"
           subtitulo="Seu histórico musical acompanhado pelo Nyx"
           tema={tema}
         />
@@ -100,7 +106,7 @@ export default function Conquistas() {
           </View>
           <View style={styles.infoDestaque}>
             <Text style={styles.textoDestaque}>Tempo de Audição Total</Text>
-            <Text style={styles.valorDestaque}>{tempoTotalHoras} Horas</Text>
+            <Text style={styles.valorDestaque}>{tempoTotalTexto}</Text>
           </View>
         </View>
 

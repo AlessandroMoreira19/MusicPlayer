@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image, KeyboardAvoidingView } from 'react-native';
 import firebase, { MusicasContext, MASCOTE, AnimarEntrada } from '../config/config';
 
 export default function Login({ navigation }) {
@@ -35,7 +35,9 @@ export default function Login({ navigation }) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: tema.bg }]}>
+    // Empurra o card para cima quando o teclado abre, evitando cobrir os campos
+    // Referência: https://reactnative.dev/docs/keyboardavoidingview
+    <KeyboardAvoidingView behavior="padding" style={[styles.container, { backgroundColor: tema.bg }]}>
       <AnimarEntrada style={[styles.card, { backgroundColor: tema.card }]}>
         <View style={[styles.bolhaMascote, { backgroundColor: tema.primariaClara }]}>
           <Image source={carregando ? MASCOTE.trabalhando : MASCOTE.fones} style={styles.mascote} />
@@ -75,7 +77,7 @@ export default function Login({ navigation }) {
           <Text style={[styles.textoLink, { color: tema.primaria }]}>Não tem uma conta? Cadastre-se</Text>
         </TouchableOpacity>
       </AnimarEntrada>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

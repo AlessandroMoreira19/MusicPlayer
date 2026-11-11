@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { extrairTags } from './ExtrairTags';
-import { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada } from '../config/config';
+import { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada, vibrar } from '../config/config';
 
 const ALTURA_LINHA_FILA = 64;
 const POSES_TOCANDO = [MASCOTE.fones, MASCOTE.som, MASCOTE.voando];
@@ -15,13 +15,20 @@ function ItemFilaArrastavel({ item, index, tocandoAgora, tema, onSelect, onRemov
   const [arrastando, setArrastando] = useState(false);
 
   // Guarda valores atuais em ref para o PanResponder não usar referências antigas
+  // Referência PanResponder (gestos de arrastar): https://reactnative.dev/docs/panresponder
   const dadosRef = useRef({ index, onReorder });
   dadosRef.current = { index, onReorder };
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => setArrastando(true),
+      onMoveShouldSetPanResponder: () => true,
+      // Impede que a rolagem da lista "roube" o gesto no meio do arraste (comum no Android)
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        vibrar(30);
+        setArrastando(true);
+      },
       onPanResponderMove: (_, gestureState) => setDeslocamentoY(gestureState.dy),
       onPanResponderRelease: (_, gestureState) => {
         // Divide a distância arrastada pela altura fixa do item (64px) para achar a nova posição
@@ -86,6 +93,7 @@ function ItemFilaArrastavel({ item, index, tocandoAgora, tema, onSelect, onRemov
 
 export default function ReproduzirItens() {
   const {
+    usuario,
     musicaAtual,
     setMusicas,
     fila,
@@ -96,6 +104,7 @@ export default function ReproduzirItens() {
     removerDaFila,
     reordenarFila,
     abrirMenuOpcoes,
+    sincronizarEstatisticas,
     tema,
   } = useContext(MusicasContext);
 
@@ -105,12 +114,24 @@ export default function ReproduzirItens() {
   const [capaAlbum, setCapaAlbum] = useState(null);
   const [modalFilaVisivel, setModalFilaVisivel] = useState(false);
   const [indicePose, setIndicePose] = useState(0);
+  const [arrastandoSlider, setArrastandoSlider] = useState(false);
+  const [posicaoArrasto, setPosicaoArrasto] = useState(0);
+  const arrastoTimerRef = useRef(null);
 
+  useEffect(() => {
+    return () => {
+      if (arrastoTimerRef.current) clearTimeout(arrastoTimerRef.current);
+    };
+  }, []);
+
+  // Hooks de reprodução da biblioteca expo-audio (substituta moderna do expo-av)
+  // Referência: https://docs.expo.dev/versions/latest/sdk/audio/
   const source = musicaAtual?.uri && !musicaAtual?.indisponivel ? { uri: musicaAtual.uri } : null;
   const player = useAudioPlayer(source);
   const status = useAudioPlayerStatus(player);
 
   // Animação contínua de pulsação suave do mascote enquanto a música toca
+  // Referência: https://reactnative.dev/docs/animated
   const pulsoAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -187,20 +208,25 @@ export default function ReproduzirItens() {
   }, [status.duration, musicaAtual?.uri]);
 
   useEffect(() => {
-    if (musicaAtual?.uri && player && !musicaAtual?.indisponivel) {
+    if (!player) return;
+    if (musicaAtual?.uri && !musicaAtual?.indisponivel) {
       player.play();
+    } else {
+      player.pause();
     }
   }, [musicaAtual?.uri]);
 
   const alternarPlayPause = () => {
     if (!player) return;
+    vibrar(25);
     if (status.playing) player.pause();
     else player.play();
   };
 
-  // Salva a reprodução concluída no armazenamento local para futura sincronização com o Firebase
+  // Salva a reprodução concluída no armazenamento local e sincroniza com o Firebase se estiver online
   const guardarEstatisticaLocal = async () => {
     try {
+      vibrar([0, 35, 50, 35]);
       const statsAnteriores = await AsyncStorage.getItem('estatisticas_pendentes');
       const arrayStats = statsAnteriores ? JSON.parse(statsAnteriores) : [];
       arrayStats.push({
@@ -211,6 +237,9 @@ export default function ReproduzirItens() {
         data: new Date().toISOString(),
       });
       await AsyncStorage.setItem('estatisticas_pendentes', JSON.stringify(arrayStats));
+      if (usuario?.uid && sincronizarEstatisticas) {
+        await sincronizarEstatisticas(usuario.uid);
+      }
     } catch (e) {}
   };
 
@@ -233,12 +262,22 @@ export default function ReproduzirItens() {
       ? 'Nyx está curtindo o som ♪'
       : 'Nyx aguardando você soltar o som';
 
+  const trocarPoseMascote = () => {
+    vibrar(20);
+    setIndicePose((prev) => prev + 1);
+  };
+
+  const duracaoTotal = (status.duration > 0 ? status.duration : musicaAtual?.tags?.duration) || 0;
+  const tempoAtual = arrastandoSlider ? posicaoArrasto : (status.currentTime || 0);
+  const maximoSlider = duracaoTotal > 0 ? duracaoTotal : 1;
+  const valorSlider = Math.max(0, Math.min(tempoAtual, maximoSlider));
+
   return (
     <AnimarEntrada gatilho={musicaAtual?.uri} style={[styles.container, { backgroundColor: tema.bg }]}>
       <View style={styles.barraSuperior}>
         <TouchableOpacity
           style={[styles.pilulaMascote, { backgroundColor: tema.card, borderColor: tema.borda }]}
-          onPress={() => setIndicePose((prev) => prev + 1)}
+          onPress={trocarPoseMascote}
         >
           <Image source={poseMascote} style={styles.iconePilula} />
           <Text style={[styles.textoPilula, { color: tema.primaria }]}>{fraseMascote}</Text>
@@ -257,7 +296,7 @@ export default function ReproduzirItens() {
       <View style={styles.palcoCentral}>
         <TouchableOpacity
           activeOpacity={0.9}
-          onPress={() => setIndicePose((prev) => prev + 1)}
+          onPress={trocarPoseMascote}
           style={[styles.capa, { backgroundColor: capaAlbum ? tema.card : tema.primariaClara, borderColor: tema.primaria }]}
         >
           {capaAlbum ? (
@@ -294,16 +333,36 @@ export default function ReproduzirItens() {
         <Slider
           style={styles.slider}
           minimumValue={0}
-          maximumValue={status.duration || 1}
-          value={status.currentTime || 0}
-          onSlidingComplete={(v) => player?.seekTo(v)}
+          maximumValue={maximoSlider}
+          value={valorSlider}
+          disabled={!musicaAtual?.uri || duracaoTotal <= 0}
+          onSlidingStart={(v) => {
+            if (arrastoTimerRef.current) clearTimeout(arrastoTimerRef.current);
+            setArrastandoSlider(true);
+            setPosicaoArrasto(v);
+          }}
+          onValueChange={(v) => {
+            setPosicaoArrasto(v);
+          }}
+          onSlidingComplete={async (v) => {
+            setPosicaoArrasto(v);
+            if (player) {
+              try {
+                await player.seekTo(v);
+              } catch (e) {}
+            }
+            if (arrastoTimerRef.current) clearTimeout(arrastoTimerRef.current);
+            arrastoTimerRef.current = setTimeout(() => {
+              setArrastandoSlider(false);
+            }, 300);
+          }}
           minimumTrackTintColor={tema.primaria}
           maximumTrackTintColor={tema.subtexto}
           thumbTintColor={tema.primaria}
         />
         <View style={styles.tempoContainer}>
-          <Text style={[styles.textoTempo, { color: tema.subtexto }]}>{formatarTempo(status.currentTime)}</Text>
-          <Text style={[styles.textoTempo, { color: tema.subtexto }]}>{formatarTempo(status.duration)}</Text>
+          <Text style={[styles.textoTempo, { color: tema.subtexto }]}>{formatarTempo(tempoAtual)}</Text>
+          <Text style={[styles.textoTempo, { color: tema.subtexto }]}>{formatarTempo(duracaoTotal)}</Text>
         </View>
       </View>
 

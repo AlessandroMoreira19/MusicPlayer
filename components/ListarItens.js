@@ -1,12 +1,14 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Image, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Image } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada, BannerMascote } from '../config/config';
+import { MusicasContext, formatarTempo, MASCOTE, AnimarEntrada, BannerMascote, confirmarAcao, vibrar } from '../config/config';
 import { extrairTags } from './ExtrairTags';
 
 export default function ListarItens({ navigation }) {
   const {
+    usuario,
+    sairDaConta,
     musicas,
     setMusicas,
     tocarAgora,
@@ -21,6 +23,8 @@ export default function ListarItens({ navigation }) {
   const [modoSelecao, setModoSelecao] = useState(false);
   const [selecionadas, setSelecionadas] = useState([]);
 
+  // Abre o seletor de arquivos do sistema para importar um ou vários arquivos MP3
+  // Referência DocumentPicker: https://docs.expo.dev/versions/latest/sdk/document-picker/
   const selecionarVariasMusicas = async () => {
     try {
       const resultado = await DocumentPicker.getDocumentAsync({
@@ -43,7 +47,11 @@ export default function ListarItens({ navigation }) {
           listaAtualizada.push({ uri: item.uri, name: item.name, tags });
         } else if (!listaAtualizada[idx].tags?.artwork || listaAtualizada[idx].tags?.artist === 'Artista Desconhecido') {
           const tags = await extrairTags(item.uri, item.name);
-          listaAtualizada[idx] = { uri: item.uri, name: item.name, tags };
+          listaAtualizada[idx] = {
+            uri: item.uri,
+            name: item.name,
+            tags: { ...tags, duration: tags.duration || listaAtualizada[idx].tags?.duration || 0 },
+          };
         }
       }
 
@@ -107,24 +115,19 @@ export default function ListarItens({ navigation }) {
   };
 
   const removerMusicaUnica = (uri) => {
+    vibrar(40);
     setMusicas((anteriores) => anteriores.filter((m) => m.uri !== uri));
   };
 
   const apagarSelecionadasEmLote = () => {
-    Alert.alert(
+    confirmarAcao(
       'Apagar Músicas',
       `Deseja remover as ${selecionadas.length} músicas selecionadas da biblioteca?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Apagar',
-          style: 'destructive',
-          onPress: () => {
-            setMusicas((anteriores) => anteriores.filter((m) => !selecionadas.includes(m.uri)));
-            sairModoSelecao();
-          },
-        },
-      ]
+      () => {
+        vibrar(50);
+        setMusicas((anteriores) => anteriores.filter((m) => !selecionadas.includes(m.uri)));
+        sairModoSelecao();
+      }
     );
   };
 
@@ -223,6 +226,21 @@ export default function ListarItens({ navigation }) {
         direita={botoesTopo}
       />
 
+      {usuario && (
+        <View style={[styles.barraConta, { backgroundColor: tema.card, borderColor: tema.borda }]}>
+          <View style={styles.infoConta}>
+            <MaterialCommunityIcons name="account-circle-outline" size={20} color={tema.primaria} />
+            <Text style={[styles.emailConta, { color: tema.subtexto }]} numberOfLines={1}>
+              {usuario.email}
+            </Text>
+          </View>
+          <TouchableOpacity style={styles.botaoSair} onPress={sairDaConta}>
+            <MaterialCommunityIcons name="logout" size={16} color="#FF6B6B" />
+            <Text style={styles.textoSair}>Sair da Conta</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <TouchableOpacity
         style={[styles.botao, { backgroundColor: tema.primaria }]}
         onPress={selecionarVariasMusicas}
@@ -284,6 +302,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', paddingTop: 45 },
   iconeTopo: { padding: 6 },
   botaoSelecionarTopo: { padding: 7, borderRadius: 10 },
+  barraConta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '92%', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 14, borderWidth: 1, marginBottom: 10 },
+  infoConta: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 10 },
+  emailConta: { fontSize: 13, fontWeight: '500', flexShrink: 1 },
+  botaoSair: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: 'rgba(255, 107, 107, 0.14)' },
+  textoSair: { color: '#FF6B6B', fontSize: 12, fontWeight: 'bold' },
   botao: { flexDirection: 'row', paddingVertical: 14, paddingHorizontal: 25, borderRadius: 14, alignItems: 'center', gap: 10, marginBottom: 14, width: '92%', justifyContent: 'center', elevation: 3 },
   textoBotao: { color: 'white', fontSize: 16, fontWeight: 'bold' },
   lista: { width: '100%', paddingHorizontal: 16 },

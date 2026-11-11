@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image, KeyboardAvoidingView } from 'react-native';
 import firebase, { MusicasContext, MASCOTE, AnimarEntrada } from '../config/config';
 
 export default function Cadastro({ navigation }) {
@@ -40,7 +40,9 @@ export default function Cadastro({ navigation }) {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: tema.bg }]}>
+    // Empurra o card para cima quando o teclado abre, evitando cobrir os campos
+    // Referência: https://reactnative.dev/docs/keyboardavoidingview
+    <KeyboardAvoidingView behavior="padding" style={[styles.container, { backgroundColor: tema.bg }]}>
       <AnimarEntrada style={[styles.card, { backgroundColor: tema.card }]}>
         <View style={[styles.bolhaMascote, { backgroundColor: tema.primariaClara }]}>
           <Image source={carregando ? MASCOTE.trabalhando : MASCOTE.carinho} style={styles.mascote} />
@@ -48,7 +50,7 @@ export default function Cadastro({ navigation }) {
 
         <Text style={[styles.titulo, { color: tema.primaria }]}>Criar Conta</Text>
         <Text style={[styles.subtitulo, { color: tema.subtexto }]}>
-          Junte-se ao Nyx para salvar playlists e conquistas na nuvem.
+          Junte-se ao Nyx para salvar playlists e estatísticas na nuvem.
         </Text>
 
         {erro ? <Text style={styles.textoErro}>{erro}</Text> : null}
@@ -80,7 +82,7 @@ export default function Cadastro({ navigation }) {
           <Text style={[styles.textoLink, { color: tema.primaria }]}>Já tem uma conta? Voltar ao Login</Text>
         </TouchableOpacity>
       </AnimarEntrada>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

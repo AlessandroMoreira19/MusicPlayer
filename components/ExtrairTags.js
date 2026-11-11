@@ -1,8 +1,14 @@
 import { Platform } from 'react-native';
 
+// O React Native e o Expo não possuem um leitor nativo de metadados MP3 (ID3).
+// Por isso, este arquivo lê os primeiros bytes do MP3 para extrair Título, Artista, Álbum e Capa.
+// Documentação oficial do padrão ID3v2: https://id3.org/id3v2.3.0
+
 const TABELA_B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
 
-// Converte bytes binários para Base64 sem depender de Buffer do Node.js
+// Converte os bytes da imagem da capa (Uint8Array) para texto Base64 (aceito pelo <Image> do React Native)
+// Referência btoa: https://www.w3schools.com/jsref/met_win_btoa.asp
+// Referência Uint8Array: https://developer.mozilla.org/pt-BR/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array
 function uint8ArrayToBase64(uint8) {
   let binario = '';
   for (let i = 0; i < uint8.byteLength; i += 8192) {
@@ -10,6 +16,8 @@ function uint8ArrayToBase64(uint8) {
   }
   if (typeof btoa === 'function') return btoa(binario);
 
+  // Fallback com operadores bit a bit (bitwise) caso o ambiente nativo não tenha btoa global
+  // Referência Bitwise: https://www.w3schools.com/js/js_bitwise.asp
   let saida = '';
   for (let i = 0; i < binario.length; ) {
     const c1 = binario.charCodeAt(i++);
@@ -26,6 +34,8 @@ function uint8ArrayToBase64(uint8) {
   return saida;
 }
 
+// Converte uma string Base64 de volta para um vetor de bytes (Uint8Array)
+// Referência Bitwise: https://www.w3schools.com/js/js_bitwise.asp
 function base64ToUint8Array(base64) {
   const limpo = base64.replace(/[^A-Za-z0-9+/]/g, '');
   const bytes = new Uint8Array(Math.floor((limpo.length * 3) / 4));
@@ -44,7 +54,9 @@ function base64ToUint8Array(base64) {
   return bytes.subarray(0, p);
 }
 
-// Lê apenas o início do MP3 (1,5 MB) onde ficam as tags e a capa, economizando memória
+// Lê apenas o início do MP3 (1,5 MB) onde ficam as tags e a capa, economizando memória no celular
+// Referência XMLHttpRequest: https://www.w3schools.com/xml/xml_http.asp
+// Referência FileReader: https://developer.mozilla.org/pt-BR/docs/Web/API/FileReader
 function lerBytesViaXHR(uri, maxBytes = 1572864) {
   return new Promise((resolve, reject) => {
     try {
@@ -76,7 +88,9 @@ function lerBytesViaXHR(uri, maxBytes = 1572864) {
   });
 }
 
-// Decodifica textos ID3 conforme o 1º byte: 0 = ISO-8859-1, 1/2 = UTF-16, 3 = UTF-8
+// Decodifica os textos salvos dentro do MP3 conforme o byte de codificação: 0 = ISO-8859-1, 1/2 = UTF-16, 3 = UTF-8
+// Referência String.fromCharCode: https://www.w3schools.com/jsref/jsref_fromcharcode.asp
+// Referência TextDecoder: https://developer.mozilla.org/pt-BR/docs/Web/API/TextDecoder
 function decodificarTextoID3(bytes) {
   if (!bytes || bytes.length <= 1) return '';
   const encoding = bytes[0];
@@ -116,14 +130,73 @@ function decodificarTextoID3(bytes) {
   }
 }
 
-// Inteiro "syncsafe" do padrão ID3: usa apenas 7 bits úteis por byte
+// No padrão ID3, o tamanho do cabeçalho usa "SyncSafe Integer" (7 bits por byte, ignorando o 8º bit com & 0x7f)
+// Referência Bitwise: https://www.w3schools.com/js/js_bitwise.asp
 const lerSyncSafe = (b, o) => ((b[o] & 0x7f) << 21) | ((b[o + 1] & 0x7f) << 14) | ((b[o + 2] & 0x7f) << 7) | (b[o + 3] & 0x7f);
 
-// Percorre os frames binários ID3v2.2, v2.3 e v2.4 em busca de título, artista, álbum e capa
+const BITRATES_MPEG1_L3 = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
+const BITRATES_MPEG2_L3 = [0, 8, 16, 24, 32, 64, 80, 56, 64, 128, 160, 112, 128, 256, 320, 0];
+const SAMPLE_RATES = {
+  3: [44100, 48000, 32000],
+  2: [22050, 24000, 16000],
+  0: [11025, 12000, 8000],
+};
+
+// Calcula a duração real do MP3 inspecionando o cabeçalho MPEG de áudio e tags Xing/Info (VBR)
+// Referência: https://www.w3schools.com/js/js_bitwise.asp
+function calcularDuracaoMP3(bytes, totalSize, inicioAudio = 0) {
+  if (!bytes || bytes.length < 4) return 0;
+
+  let pos = Math.max(0, inicioAudio);
+  const maxBusca = Math.min(bytes.length - 4, pos + 16384);
+
+  while (pos < maxBusca) {
+    if (bytes[pos] === 0xff && (bytes[pos + 1] & 0xe0) === 0xe0) {
+      const versaoBits = (bytes[pos + 1] >> 3) & 0x03;
+      const layerBits = (bytes[pos + 1] >> 1) & 0x03;
+      const bitrateIndex = (bytes[pos + 2] >> 4) & 0x0f;
+      const freqIndex = (bytes[pos + 2] >> 2) & 0x03;
+      const canalMode = (bytes[pos + 3] >> 6) & 0x03;
+
+      if (layerBits === 1 && bitrateIndex > 0 && bitrateIndex < 15 && freqIndex < 3 && versaoBits !== 1) {
+        const sampleRate = SAMPLE_RATES[versaoBits]?.[freqIndex];
+        const bitrate = (versaoBits === 3 ? BITRATES_MPEG1_L3 : BITRATES_MPEG2_L3)[bitrateIndex];
+
+        if (sampleRate && bitrate) {
+          // Detecta cabeçalho Xing / Info em arquivos com bitrate variável (VBR)
+          const xingOffset = pos + 4 + (versaoBits === 3 ? (canalMode === 3 ? 17 : 32) : (canalMode === 3 ? 9 : 17));
+          if (xingOffset + 12 <= bytes.length) {
+            const xingTag = String.fromCharCode(bytes[xingOffset], bytes[xingOffset + 1], bytes[xingOffset + 2], bytes[xingOffset + 3]);
+            if (xingTag === 'Xing' || xingTag === 'Info') {
+              const flags = (bytes[xingOffset + 4] << 24) | (bytes[xingOffset + 5] << 16) | (bytes[xingOffset + 6] << 8) | bytes[xingOffset + 7];
+              if (flags & 0x01) {
+                const totalFrames = (bytes[xingOffset + 8] << 24) | (bytes[xingOffset + 9] << 16) | (bytes[xingOffset + 10] << 8) | bytes[xingOffset + 11];
+                const samplesPerFrame = versaoBits === 3 ? 1152 : 576;
+                const duracaoVBR = Math.round((totalFrames * samplesPerFrame) / sampleRate);
+                if (duracaoVBR > 0) return duracaoVBR;
+              }
+            }
+          }
+
+          // Arquivos com bitrate constante (CBR)
+          const tamanhoAudio = Math.max(0, totalSize - pos);
+          const duracaoCBR = Math.round((tamanhoAudio * 8) / (bitrate * 1000));
+          if (duracaoCBR > 0) return duracaoCBR;
+        }
+      }
+    }
+    pos++;
+  }
+
+  return totalSize > 0 ? Math.round((totalSize * 8) / 160000) : 0;
+}
+
+// Percorre os blocos (frames) ID3v2.2, v2.3 e v2.4: TIT2 = Título, TPE1 = Artista, TALB = Álbum, APIC = Capa
+// Referência dos Frames ID3v2: https://id3.org/id3v2.3.0#Declared_ID3v2_frames
 function extrairID3Binario(bytes) {
   const res = { title: '', artist: '', album: '', pictureBase64: null, mime: 'image/jpeg' };
   try {
-    // Verifica assinatura "ID3" (0x49, 0x44, 0x33) nos 3 primeiros bytes
+    // Verifica se o arquivo começa com as letras "ID3" em ASCII (0x49 = 'I', 0x44 = 'D', 0x33 = '3')
     if (!bytes || bytes.length < 10 || bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) {
       return res;
     }
@@ -189,6 +262,8 @@ function extrairID3Binario(bytes) {
   return res;
 }
 
+// Tenta ler os bytes do arquivo local por XHR (Mobile), Fetch (Web) ou FileSystem do Expo
+// Referência Fetch API: https://www.w3schools.com/js/js_api_fetch.asp
 async function carregarBytesAudio(uri) {
   if (Platform.OS !== 'web') {
     try {
@@ -224,13 +299,18 @@ export async function extrairTags(uri, nomeArquivoPadrao = 'Música Desconhecida
     if (!arquivo?.bytes) return padrao;
 
     const id3 = extrairID3Binario(arquivo.bytes);
+    const id3Tamanho =
+      arquivo.bytes[0] === 0x49 && arquivo.bytes[1] === 0x44 && arquivo.bytes[2] === 0x33
+        ? 10 + lerSyncSafe(arquivo.bytes, 6)
+        : 0;
+    const duracaoReal = calcularDuracaoMP3(arquivo.bytes, arquivo.totalSize, id3Tamanho);
+
     return {
       title: id3.title || nomeLimpo,
       artist: id3.artist || 'Artista Desconhecido',
       album: id3.album || 'Sem Álbum',
       artwork: id3.pictureBase64 ? `data:${id3.mime};base64,${id3.pictureBase64}` : null,
-      // Estima duração inicial em 320 kbps até o player carregar a duração exata
-      duration: arquivo.totalSize > 0 ? Math.round((arquivo.totalSize * 8) / 320000) : 0,
+      duration: duracaoReal,
     };
   } catch (e) {
     return padrao;

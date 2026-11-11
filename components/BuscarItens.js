@@ -16,6 +16,7 @@ export default function BuscarItens({ navigation }) {
   const [selecionadas, setSelecionadas] = useState([]);
 
   // Busca unificada: retorna músicas, álbuns únicos e artistas únicos que batem com o termo
+  // Referência Set (coleção sem valores repetidos): https://www.w3schools.com/js/js_object_sets.asp
   const obterResultadosBusca = () => {
     const termo = textoBusca.trim().toLowerCase();
     if (!termo) return [];

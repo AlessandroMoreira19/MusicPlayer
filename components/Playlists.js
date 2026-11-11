@@ -1,24 +1,27 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Image, Modal, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Image, Modal, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import firebase, { MusicasContext, MASCOTE, AnimarEntrada, BannerMascote } from '../config/config';
+import firebase, { MusicasContext, MASCOTE, AnimarEntrada, BannerMascote, exibirAviso, vibrar } from '../config/config';
 
 export const CAPAS_PRE_SELECIONADAS = [
+  { id: 'asset_icon', nome: 'Nyx Oficial', source: MASCOTE.atento },
   { id: 'preset_nyx_fones', nome: 'Nyx Fones', source: MASCOTE.fones },
   { id: 'preset_nyx_carinho', nome: 'Nyx Coração', source: MASCOTE.carinho },
   { id: 'preset_nyx_som', nome: 'Nyx Som', source: MASCOTE.som },
   { id: 'preset_nyx_voando', nome: 'Nyx Voando', source: MASCOTE.voando },
-  { id: 'preset_rock', nome: 'Rock / Metal', icone: 'guitar-electric', cor: '#B71C1C' },
-  { id: 'preset_hiphop', nome: 'Hip-Hop / Trap', icone: 'microphone-variant', cor: '#1A237E' },
-  { id: 'preset_treino', nome: 'Treino / Gym', icone: 'dumbbell', cor: '#E65100' },
-  { id: 'preset_chill', nome: 'Chill / Lo-Fi', icone: 'coffee', cor: '#004D40' },
-  { id: 'asset_icon', nome: 'Logo App', source: require('../assets/icon.png') },
+  { id: 'preset_nyx_play', nome: 'Nyx Play', source: MASCOTE.play },
+  { id: 'preset_rock', nome: 'Rock / Metal', icone: 'guitar-electric', cor: '#E53935' },
+  { id: 'preset_hiphop', nome: 'Hip-Hop / Trap', icone: 'microphone-variant', cor: '#3949AB' },
+  { id: 'preset_pop', nome: 'Pop / Hits', icone: 'star', cor: '#D81B60' },
+  { id: 'preset_eletronica', nome: 'Eletrônica', icone: 'lightning-bolt', cor: '#8E24AA' },
+  { id: 'preset_treino', nome: 'Treino / Gym', icone: 'dumbbell', cor: '#FB8C00' },
+  { id: 'preset_chill', nome: 'Chill / Lo-Fi', icone: 'coffee', cor: '#00897B' },
 ];
 
 // Exibe a capa da playlist por prioridade: galeria -> preset -> capa da 1ª música local -> mascote Nyx
 export function RenderizarCapaPlaylist({ capaInfo, musicasDaPlaylist, musicasLocais, tamanho = 54, tema }) {
-  const estiloImg = { width: tamanho, height: tamanho, borderRadius: 12 };
+  const estiloImg = { width: tamanho, height: tamanho, borderRadius: Math.round(tamanho * 0.22) };
 
   if (capaInfo?.tipo === 'galeria' && capaInfo.uri) {
     return <Image source={{ uri: capaInfo.uri }} style={estiloImg} />;
@@ -29,7 +32,7 @@ export function RenderizarCapaPlaylist({ capaInfo, musicasDaPlaylist, musicasLoc
     if (preset?.source) {
       return (
         <View style={[estiloImg, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
-          <Image source={preset.source} style={{ width: tamanho * 0.88, height: tamanho * 0.88 }} />
+          <Image source={preset.source} style={{ width: tamanho * 0.88, height: tamanho * 0.88 }} resizeMode="contain" />
         </View>
       );
     }
@@ -51,18 +54,19 @@ export function RenderizarCapaPlaylist({ capaInfo, musicasDaPlaylist, musicasLoc
 
   return (
     <View style={[estiloImg, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
-      <Image source={MASCOTE.carinho} style={{ width: tamanho * 0.85, height: tamanho * 0.85 }} />
+      <Image source={MASCOTE.carinho} style={{ width: tamanho * 0.85, height: tamanho * 0.85 }} resizeMode="contain" />
     </View>
   );
 }
 
 // Modal reutilizável para escolher capa na criação e na edição da playlist
+// Referência ImagePicker: https://docs.expo.dev/versions/latest/sdk/imagepicker/
 export function ModalEscolherCapa({ visivel, aoFechar, aoEscolherCapa, tema, titulo = 'Capa da Playlist' }) {
   const escolherDaGaleria = async () => {
     try {
       const permissao = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissao.granted) {
-        Alert.alert('Permissão necessária', 'Precisamos de acesso à galeria para definir a capa.');
+        exibirAviso('Permissão necessária', 'Precisamos de acesso à galeria para definir a capa.');
         return;
       }
 
@@ -95,31 +99,33 @@ export function ModalEscolherCapa({ visivel, aoFechar, aoEscolherCapa, tema, tit
           </TouchableOpacity>
 
           <Text style={[styles.subtituloModal, { color: tema.subtexto }]}>Ou escolha uma capa do Nyx / Estilo:</Text>
-          <View style={styles.gradePresets}>
-            {CAPAS_PRE_SELECIONADAS.map((p) => (
-              <TouchableOpacity
-                key={p.id}
-                style={styles.itemPreset}
-                onPress={() => {
-                  aoEscolherCapa({ tipo: 'preset', id: p.id });
-                  aoFechar();
-                }}
-              >
-                {p.source ? (
-                  <View style={[styles.imgPreset, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
-                    <Image source={p.source} style={{ width: 54, height: 54 }} />
-                  </View>
-                ) : (
-                  <View style={[styles.imgPreset, styles.caixaCentralizada, { backgroundColor: p.cor }]}>
-                    <MaterialCommunityIcons name={p.icone} size={28} color="#FFF" />
-                  </View>
-                )}
-                <Text style={{ fontSize: 11, color: tema.texto, marginTop: 4 }} numberOfLines={1}>
-                  {p.nome}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <ScrollView style={styles.scrollPresets} showsVerticalScrollIndicator={false}>
+            <View style={styles.gradePresets}>
+              {CAPAS_PRE_SELECIONADAS.map((p) => (
+                <TouchableOpacity
+                  key={p.id}
+                  style={styles.itemPreset}
+                  onPress={() => {
+                    aoEscolherCapa({ tipo: 'preset', id: p.id });
+                    aoFechar();
+                  }}
+                >
+                  {p.source ? (
+                    <View style={[styles.imgPreset, styles.caixaCentralizada, { backgroundColor: tema.primariaClara }]}>
+                      <Image source={p.source} style={{ width: 50, height: 50 }} resizeMode="contain" />
+                    </View>
+                  ) : (
+                    <View style={[styles.imgPreset, styles.caixaCentralizada, { backgroundColor: p.cor }]}>
+                      <MaterialCommunityIcons name={p.icone} size={28} color="#FFF" />
+                    </View>
+                  )}
+                  <Text style={{ fontSize: 11, color: tema.texto, marginTop: 4, textAlign: 'center' }} numberOfLines={1}>
+                    {p.nome}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -136,8 +142,13 @@ export default function Playlists({ navigation }) {
     // Remove caracteres proibidos em chaves do Firebase Realtime Database
     const nome = novaPlaylist.trim().replace(/[.#$\[\]\/]/g, '');
     if (!nome || !usuario) return;
+    if (playlistsGlobais[nome]) {
+      exibirAviso('Nome já usado', `Você já tem uma playlist chamada "${nome}". Escolha outro nome.`);
+      return;
+    }
 
     try {
+      vibrar(45);
       await firebase.database().ref(`users/${usuario.uid}/playlists/${nome}`).set({
         criadaEm: Date.now(),
         capa: capaEscolhida || null,
@@ -248,7 +259,8 @@ const styles = StyleSheet.create({
   botaoGaleria: { flexDirection: 'row', padding: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
   textoGaleria: { color: '#FFF', fontWeight: 'bold', marginLeft: 8 },
   subtituloModal: { fontSize: 13, fontWeight: 'bold', marginBottom: 10 },
+  scrollPresets: { maxHeight: 370, width: '100%' },
   gradePresets: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
-  itemPreset: { alignItems: 'center', width: '30%', marginBottom: 8 },
+  itemPreset: { alignItems: 'center', width: '30%', marginBottom: 10 },
   imgPreset: { width: 62, height: 62, borderRadius: 14, overflow: 'hidden' },
 });

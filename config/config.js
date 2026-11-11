@@ -1,5 +1,5 @@
 import React, { createContext, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform, Alert, Vibration } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
@@ -20,7 +20,8 @@ if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 
-// Contexto e utilitários compartilhados ficam aqui para evitar ciclo de importação (Require cycle) com o App.js
+// Contexto global para compartilhar estados entre todas as telas sem precisar passar via props
+// Referência: https://react.dev/reference/react/createContext
 export const MusicasContext = createContext();
 
 export const MASCOTE = {
@@ -52,7 +53,43 @@ export const formatarTempo = (segundos, padrao = '00:00') => {
   return `${min}:${seg < 10 ? '0' : ''}${seg}`;
 };
 
-// Transição rápida e fluida toda vez que a aba/tela recebe foco (sem piscar a tela)
+// Confirmação compatível com Mobile (Alert nativo) e Web (window.confirm, já que Alert.alert é vazio no react-native-web)
+// Referência: https://www.w3schools.com/jsref/met_win_confirm.asp
+export const confirmarAcao = (titulo, mensagem, aoConfirmar) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (window.confirm(`${titulo}\n\n${mensagem}`)) aoConfirmar();
+  } else {
+    Alert.alert(titulo, mensagem, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Confirmar', style: 'destructive', onPress: aoConfirmar },
+    ]);
+  }
+};
+
+// Aviso simples compatível com Mobile (Alert nativo) e Web (window.alert)
+// Referência: https://www.w3schools.com/jsref/met_win_alert.asp
+export const exibirAviso = (titulo, mensagem) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(`${titulo}\n\n${mensagem}`);
+  } else {
+    Alert.alert(titulo, mensagem);
+  }
+};
+
+// Aciona o motor de vibração (atuador físico do celular) para dar feedback tátil nas interações
+// Referência React Native Vibration: https://reactnative.dev/docs/vibration
+export const vibrar = (padrao = 35) => {
+  try {
+    if (Platform.OS !== 'web') {
+      Vibration.vibrate(padrao);
+    } else if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(padrao);
+    }
+  } catch (e) {}
+};
+
+// Transição suave toda vez que a aba/tela recebe foco
+// Referências: https://reactnative.dev/docs/animated e https://reactnavigation.org/docs/use-is-focused/
 export function AnimarEntrada({ children, style, gatilho }) {
   const focado = useIsFocused();
   const anim = useRef(new Animated.Value(0)).current;
@@ -62,8 +99,7 @@ export function AnimarEntrada({ children, style, gatilho }) {
     anim.setValue(0);
     Animated.timing(anim, {
       toValue: 1,
-      duration: 190,
-      easing: Easing.out(Easing.cubic),
+      duration: 180,
       useNativeDriver: true,
     }).start();
   }, [focado, gatilho]);
@@ -73,11 +109,8 @@ export function AnimarEntrada({ children, style, gatilho }) {
       style={[
         style,
         {
-          opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] }),
-          transform: [
-            { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
-            { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.985, 1] }) },
-          ],
+          opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }),
+          transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [6, 0] }) }],
         },
       ]}
     >
