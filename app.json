@@ -1,12 +1,20 @@
 {
   "expo": {
     "name": "MusicPlayer",
-    "slug": "MusicPlayer",
-    "version": "1.0.0",
+    "slug": "musicplayer-nyx",
+    "version": "1.0.2",
+    "orientation": "portrait",
+    "icon": "./assets/mascote_fones.png",
+    "splash": {
+      "image": "./assets/mascote_voando.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F0F17"
+    },
     "android": {
+      "versionCode": 3,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/mascote_fones.png",
+        "backgroundColor": "#1B1B29"
       },
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -14,9 +22,18 @@
         "android.permission.READ_MEDIA_AUDIO",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS"
       ],
-      "package": "com.anonymous.MusicPlayer"
+      "package": "com.fei.musicplayer"
+    },
+    "plugins": [
+      ["expo-audio", { "recordAudioAndroid": false, "enableBackgroundPlayback": true }]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3f5d90a9-d36a-4ce6-93e1-f44f893b11a1"
+      }
     }
   }
 }

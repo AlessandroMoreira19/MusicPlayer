@@ -161,8 +161,27 @@ export default function ReproduzirItens() {
 
   // Permite reproduzir som mesmo quando a chave física do aparelho está no silencioso
   useEffect(() => {
-    setAudioModeAsync({ playsInSilentMode: true }).catch(() => {});
+    // shouldPlayInBackground mantém o áudio tocando com a tela bloqueada ou em outro app
+    // Referência: https://docs.expo.dev/versions/latest/sdk/audio/
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      interruptionMode: 'doNotMix',
+    }).catch(() => {});
   }, []);
+
+  // Controles na notificação / tela de bloqueio (também evita o Android encerrar o áudio após ~3 min)
+  useEffect(() => {
+    if (!player || !musicaAtual?.uri || musicaAtual?.indisponivel) return;
+    try {
+      player.setActiveForLockScreen(true, {
+        title: nomeMusica,
+        artist: nomeArtista,
+        albumTitle: nomeAlbum || undefined,
+        artworkUrl: capaAlbum || undefined,
+      });
+    } catch (e) {}
+  }, [player, musicaAtual?.uri, nomeMusica, nomeArtista, nomeAlbum, capaAlbum]);
 
   useEffect(() => {
     async function carregarMetadados() {

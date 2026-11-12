@@ -1,7 +1,9 @@
 import React, { createContext, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Animated, Platform, Alert, Vibration } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import firebase from 'firebase/compat/app';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import 'firebase/compat/auth';
 import 'firebase/compat/database';
 
@@ -18,6 +20,15 @@ const firebaseConfig = {
 // Evita reinicializar o Firebase durante o Hot Reload
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
+
+  // No celular o Firebase Auth guarda o login só na memória por padrão (some ao fechar o app).
+  // Aqui o login passa a ser salvo no AsyncStorage para continuar logado ao reabrir.
+  // Referência: https://firebase.google.com/docs/auth/web/auth-state-persistence
+  if (Platform.OS !== 'web') {
+    try {
+      initializeAuth(firebase.app(), { persistence: getReactNativePersistence(AsyncStorage) });
+    } catch (e) {}
+  }
 }
 
 // Contexto global para compartilhar estados entre todas as telas sem precisar passar via props
