@@ -142,6 +142,38 @@ const SAMPLE_RATES = {
   0: [11025, 12000, 8000],
 };
 
+// Percorre os frames MP3 seguidos a partir de "inicio" e devolve o bitrate médio em bps (0 se amostra pequena)
+function mediaBitrateFrames(bytes, inicio) {
+  let pos = inicio;
+  let somaBitrate = 0;
+  let frames = 0;
+  let falhas = 0;
+
+  while (pos + 4 < bytes.length && frames < 5000) {
+    if (bytes[pos] === 0xff && (bytes[pos + 1] & 0xe0) === 0xe0) {
+      const versaoBits = (bytes[pos + 1] >> 3) & 0x03;
+      const layerBits = (bytes[pos + 1] >> 1) & 0x03;
+      const bitrateIndex = (bytes[pos + 2] >> 4) & 0x0f;
+      const freqIndex = (bytes[pos + 2] >> 2) & 0x03;
+      const padding = (bytes[pos + 2] >> 1) & 0x01;
+      const sampleRate = SAMPLE_RATES[versaoBits]?.[freqIndex];
+      if (layerBits === 1 && versaoBits !== 1 && bitrateIndex > 0 && bitrateIndex < 15 && sampleRate) {
+        const bitrate = (versaoBits === 3 ? BITRATES_MPEG1_L3 : BITRATES_MPEG2_L3)[bitrateIndex] * 1000;
+        const tamFrame = Math.floor(((versaoBits === 3 ? 144000 : 72000) * (bitrate / 1000)) / sampleRate) + padding;
+        somaBitrate += bitrate;
+        frames++;
+        pos += tamFrame;
+        continue;
+      }
+    }
+    // Perdeu o sincronismo: tenta achar o próximo frame byte a byte (poucas tentativas)
+    if (++falhas > 2000) break;
+    pos++;
+  }
+
+  return frames >= 50 ? somaBitrate / frames : 0;
+}
+
 // Calcula a duração real do MP3 inspecionando o cabeçalho MPEG de áudio e tags Xing/Info (VBR)
 // Referência: https://www.w3schools.com/js/js_bitwise.asp
 function calcularDuracaoMP3(bytes, totalSize, inicioAudio = 0) {
@@ -178,9 +210,12 @@ function calcularDuracaoMP3(bytes, totalSize, inicioAudio = 0) {
             }
           }
 
-          // Arquivos com bitrate constante (CBR)
+          // Sem cabeçalho Xing: percorre vários frames e usa o bitrate MÉDIO. Em MP3 de bitrate variável (VBR)
+          // sem Xing, o primeiro frame engana (ex.: 320 kbps) e a duração fica bem menor que a real.
+          const mediaBitrate = mediaBitrateFrames(bytes, pos);
+          const bitrateUsado = mediaBitrate || bitrate * 1000;
           const tamanhoAudio = Math.max(0, totalSize - pos);
-          const duracaoCBR = Math.round((tamanhoAudio * 8) / (bitrate * 1000));
+          const duracaoCBR = Math.round((tamanhoAudio * 8) / bitrateUsado);
           if (duracaoCBR > 0) return duracaoCBR;
         }
       }
@@ -311,6 +346,8 @@ export async function extrairTags(uri, nomeArquivoPadrao = 'Música Desconhecida
       album: id3.album || 'Sem Álbum',
       artwork: id3.pictureBase64 ? `data:${id3.mime};base64,${id3.pictureBase64}` : null,
       duration: duracaoReal,
+      // Duração medida nos frames do MP3 (mais confiável que a estimativa do player em VBR sem cabeçalho)
+      duracaoConfiavel: duracaoReal > 0 && arquivo.bytes.length > 4096,
     };
   } catch (e) {
     return padrao;

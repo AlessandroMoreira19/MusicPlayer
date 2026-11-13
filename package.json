@@ -1,6 +1,6 @@
 {
   "name": "MusicPlayer",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "license": "0BSD",
   "main": "index.js",
   "scripts": {

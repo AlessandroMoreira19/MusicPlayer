@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Modal, FlatList, TouchableOpacity, PanResponder, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Modal, FlatList, TouchableOpacity, PanResponder, Animated, Platform } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
@@ -114,6 +114,9 @@ export default function ReproduzirItens() {
   const [capaAlbum, setCapaAlbum] = useState(null);
   const [modalFilaVisivel, setModalFilaVisivel] = useState(false);
   const [indicePose, setIndicePose] = useState(0);
+  const [uriMetadados, setUriMetadados] = useState(null);
+  const [capaNotificacao, setCapaNotificacao] = useState(null);
+  const contadorCapaRef = useRef(0);
   const [arrastandoSlider, setArrastandoSlider] = useState(false);
   const [posicaoArrasto, setPosicaoArrasto] = useState(0);
   const arrastoTimerRef = useRef(null);
@@ -171,17 +174,52 @@ export default function ReproduzirItens() {
   }, []);
 
   // Controles na notificação / tela de bloqueio (também evita o Android encerrar o áudio após ~3 min)
+  // Só envia os dados quando os metadados já pertencem à música atual (evita "Nenhuma música na fila")
+  const metadadosProntos = !!musicaAtual?.uri && uriMetadados === musicaAtual.uri;
+
+  // A notificação do Android não aceita Base64: salvamos a capa como arquivo no cache e passamos o file://
+  // Referência: https://docs.expo.dev/versions/latest/sdk/filesystem/
   useEffect(() => {
-    if (!player || !musicaAtual?.uri || musicaAtual?.indisponivel) return;
+    let cancelado = false;
+    setCapaNotificacao(null);
+    if (Platform.OS === 'web' || !metadadosProntos || !capaAlbum) return;
+
+    if (!capaAlbum.startsWith('data:')) {
+      setCapaNotificacao(capaAlbum);
+      return;
+    }
     try {
-      player.setActiveForLockScreen(true, {
-        title: nomeMusica,
-        artist: nomeArtista,
-        albumTitle: nomeAlbum || undefined,
-        artworkUrl: capaAlbum || undefined,
-      });
+      const { File, Paths } = require('expo-file-system');
+      const base64 = capaAlbum.split(',')[1];
+      const extensao = capaAlbum.startsWith('data:image/png') ? 'png' : 'jpg';
+      contadorCapaRef.current += 1;
+      const arquivo = new File(Paths.cache, `capa_notificacao_${contadorCapaRef.current}.${extensao}`);
+      arquivo.create({ overwrite: true });
+      arquivo.write(base64, { encoding: 'base64' });
+      if (!cancelado) setCapaNotificacao(arquivo.uri);
     } catch (e) {}
-  }, [player, musicaAtual?.uri, nomeMusica, nomeArtista, nomeAlbum, capaAlbum]);
+    return () => {
+      cancelado = true;
+    };
+  }, [metadadosProntos, capaAlbum]);
+
+  const metaLock = {
+    title: nomeMusica,
+    artist: nomeArtista,
+    albumTitle: nomeAlbum || undefined,
+    artworkUrl: capaNotificacao || undefined,
+  };
+
+  useEffect(() => {
+    if (!player || !metadadosProntos || musicaAtual?.indisponivel) return;
+    try {
+      player.setActiveForLockScreen(true, metaLock);
+    } catch (e) {}
+    // Atualiza também o texto já exibido caso a notificação já exista
+    try {
+      player.updateLockScreenMetadata(metaLock);
+    } catch (e) {}
+  }, [player, metadadosProntos, musicaAtual?.uri, nomeMusica, nomeArtista, nomeAlbum, capaNotificacao]);
 
   useEffect(() => {
     async function carregarMetadados() {
@@ -190,6 +228,7 @@ export default function ReproduzirItens() {
         setNomeArtista('Selecione uma faixa para o Nyx tocar');
         setNomeAlbum('');
         setCapaAlbum(null);
+        setUriMetadados(null);
         return;
       }
 
@@ -198,12 +237,14 @@ export default function ReproduzirItens() {
         setNomeArtista(musicaAtual.tags.artist);
         setNomeAlbum(musicaAtual.tags.album || 'Sem Álbum');
         setCapaAlbum(musicaAtual.tags.artwork);
+        setUriMetadados(musicaAtual.uri);
       } else {
         const tags = await extrairTags(musicaAtual.uri, musicaAtual.name);
         setNomeMusica(tags.title);
         setNomeArtista(tags.artist);
         setNomeAlbum(tags.album);
         setCapaAlbum(tags.artwork);
+        setUriMetadados(musicaAtual.uri);
 
         setMusicas((antigas) =>
           antigas.map((m) => (m.uri === musicaAtual.uri ? { ...m, tags: { ...m.tags, ...tags } } : m))
@@ -218,7 +259,7 @@ export default function ReproduzirItens() {
     if (musicaAtual?.uri && status.duration > 0) {
       setMusicas((antigas) =>
         antigas.map((m) =>
-          m.uri === musicaAtual.uri && (!m.tags?.duration || Math.abs(m.tags.duration - status.duration) > 2)
+          m.uri === musicaAtual.uri && !m.tags?.duracaoConfiavel && (!m.tags?.duration || Math.abs(m.tags.duration - status.duration) > 2)
             ? { ...m, tags: { ...m.tags, duration: status.duration } }
             : m
         )
@@ -286,7 +327,12 @@ export default function ReproduzirItens() {
     setIndicePose((prev) => prev + 1);
   };
 
-  const duracaoTotal = (status.duration > 0 ? status.duration : musicaAtual?.tags?.duration) || 0;
+  // Em MP3 VBR sem cabeçalho o player estima a duração pelo 1º frame e erra muito (mostra menos tempo).
+  // Se a duração medida nos frames diverge mais de 8% da do player, usamos a medida.
+  const durTags = musicaAtual?.tags?.duration || 0;
+  const durPlayer = status.duration > 0 ? status.duration : 0;
+  const usarTags = durTags > 0 && musicaAtual?.tags?.duracaoConfiavel && (!durPlayer || Math.abs(durPlayer - durTags) / durTags > 0.08);
+  const duracaoTotal = (usarTags ? durTags : durPlayer || durTags) || 0;
   const tempoAtual = arrastandoSlider ? posicaoArrasto : (status.currentTime || 0);
   const maximoSlider = duracaoTotal > 0 ? duracaoTotal : 1;
   const valorSlider = Math.max(0, Math.min(tempoAtual, maximoSlider));

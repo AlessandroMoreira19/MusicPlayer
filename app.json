@@ -2,7 +2,7 @@
   "expo": {
     "name": "MusicPlayer",
     "slug": "musicplayer-nyx",
-    "version": "1.0.2",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/mascote_fones.png",
     "splash": {
@@ -11,7 +11,7 @@
       "backgroundColor": "#0F0F17"
     },
     "android": {
-      "versionCode": 3,
+      "versionCode": 5,
       "adaptiveIcon": {
         "foregroundImage": "./assets/mascote_fones.png",
         "backgroundColor": "#1B1B29"

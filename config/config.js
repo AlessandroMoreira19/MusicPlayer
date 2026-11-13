@@ -7,14 +7,15 @@ import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import 'firebase/compat/auth';
 import 'firebase/compat/database';
 
+// Expo carrega automaticamente variáveis EXPO_PUBLIC_* do arquivo .env em process.env
 const firebaseConfig = {
-  apiKey: 'AIzaSyAsSpC_ct4IsHRJ2uOCKiHU41mi2l-V5mQ',
-  authDomain: 'musicplayer-a59b6.firebaseapp.com',
-  databaseURL: 'https://musicplayer-a59b6-default-rtdb.firebaseio.com',
-  projectId: 'musicplayer-a59b6',
-  storageBucket: 'musicplayer-a59b6.firebasestorage.app',
-  messagingSenderId: '177499307503',
-  appId: '1:177499307503:web:235d0c5ed2167490538a1a',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
 // Evita reinicializar o Firebase durante o Hot Reload
