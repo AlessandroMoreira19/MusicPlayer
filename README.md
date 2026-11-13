@@ -63,8 +63,6 @@
 
 ▶️ **[Assista ao vídeo explicativo no YouTube](https://www.youtube.com/watch?v=-DrfFa8kz2U)**
 
-[![Vídeo explicativo do MusicPlayer (Nyx) no YouTube](https://img.youtube.com/vi/-DrfFa8kz2U/hqdefault.jpg)](https://www.youtube.com/watch?v=-DrfFa8kz2U)
-
 | Reproduzir | Playlists | Buscar | Biblioteca (Listar) | Estatísticas |
 | :---: | :---: | :---: | :---: | :---: |
 | <img src="./docs/prints/print_reproduzir.jpg" width="160" alt="Tela Reproduzir" /> | <img src="./docs/prints/print_playlists.jpg" width="160" alt="Tela Playlists" /> | <img src="./docs/prints/print_buscar.jpg" width="160" alt="Tela Buscar" /> | <img src="./docs/prints/print_listar.jpg" width="160" alt="Tela Listar Músicas" /> | <img src="./docs/prints/print_estatisticas.jpg" width="160" alt="Tela Estatísticas" /> |
