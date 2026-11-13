@@ -42,12 +42,59 @@ O aplicativo permite importar arquivos `.mp3` locais do dispositivo — extraind
 
 ## 🚀 Instalação e Execução
 
+### 1. Pré-requisitos
+
+- Node.js e npm instalados.
+- Git instalado.
+- Expo Go no celular (opcional, para testar no dispositivo).
+
+### 2. Baixar o projeto e instalar dependências
+
 ```bash
-git clone <URL_DO_REPOSITORIO>
+git clone https://github.com/AlessandroMoreira19/MusicPlayer.git
 cd MusicPlayer
 npm install
+```
+
+### 3. Configurar o Firebase
+
+As configurações do Firebase são lidas de variáveis de ambiente. **Antes de iniciar o aplicativo, crie um arquivo `.env` na raiz do projeto**, no mesmo nível do `package.json`.
+
+Você pode copiar o modelo incluído no repositório:
+
+**macOS / Linux:**
+```bash
+cp .env.example .env
+```
+
+**Windows PowerShell:**
+```powershell
+Copy-Item .env.example .env
+```
+
+Abra o arquivo `.env` e substitua os valores de exemplo pelos dados do seu aplicativo Firebase. Para encontrá-los, acesse o [Firebase Console](https://console.firebase.google.com/), abra as configurações do projeto e consulte a configuração do SDK do aplicativo Web.
+
+O arquivo deve conter estas variáveis:
+
+```env
+EXPO_PUBLIC_FIREBASE_API_KEY=SUA_API_KEY
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=SEU_PROJETO.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_DATABASE_URL=https://SEU_PROJETO-default-rtdb.firebaseio.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=SEU_PROJECT_ID
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=SEU_PROJETO.firebasestorage.app
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=SEU_SENDER_ID
+EXPO_PUBLIC_FIREBASE_APP_ID=SEU_APP_ID
+```
+
+> **Importante:** nunca substitua os valores do `.env.example` pelos valores reais. Não envie o arquivo `.env` ao GitHub. Ele está listado no `.gitignore`. As variáveis `EXPO_PUBLIC_*` são incorporadas ao aplicativo e podem ser vistas por quem o instala; elas não são segredos. Proteja o Firebase com regras de segurança adequadas e nunca coloque senhas administrativas, chaves privadas ou credenciais de servidor nessas variáveis.
+
+### 4. Iniciar o aplicativo
+
+```bash
 npx expo start -c
 ```
 
-* **No Celular:** Escaneie o QR Code com o aplicativo **Expo Go**.
-* **Na Web:** Pressione `w` no terminal.
+- **No celular:** escaneie o QR Code com o Expo Go.
+- **Na Web:** pressione `w` no terminal.
+
+Se alterar o arquivo `.env`, reinicie o Expo para carregar as novas variáveis.
