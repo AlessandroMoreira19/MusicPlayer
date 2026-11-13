@@ -18,6 +18,16 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
+const camposFirebaseObrigatorios = Object.entries(firebaseConfig)
+  .filter(([, valor]) => !valor)
+  .map(([campo]) => campo);
+
+if (camposFirebaseObrigatorios.length > 0) {
+  throw new Error(
+    `Configuração do Firebase ausente: ${camposFirebaseObrigatorios.join(', ')}. Configure as variáveis EXPO_PUBLIC_FIREBASE_* no arquivo .env.`
+  );
+}
+
 // Evita reinicializar o Firebase durante o Hot Reload
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);

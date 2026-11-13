@@ -73,11 +73,11 @@
 
 ## 🚀 Instalação, Firebase e Execução
 
-**Pré-requisitos:** Node.js 18+, npm, Expo Go (Android/iOS) ou navegador, e uma conta no [Firebase Console](https://console.firebase.google.com/).
+**Pré-requisitos:** Node.js 18+, npm, Git, Expo Go (Android/iOS) ou navegador, e uma conta no [Firebase Console](https://console.firebase.google.com/).
 
 1. **Clone e instale as dependências:**
    ```bash
-   git clone <URL_DO_REPOSITORIO>
+   git clone https://github.com/AlessandroMoreira19/MusicPlayer.git
    cd MusicPlayer
    npm install
    ```
@@ -97,13 +97,14 @@
        }
      }
      ```
-   * Registre um **App Web** nas configurações do projeto Firebase, copie o arquivo de modelo `.env.example` para `.env` (`copy .env.example .env` no Windows ou `cp .env.example .env` no Linux/macOS) e preencha suas 7 chaves `EXPO_PUBLIC_FIREBASE_*` *(todas as instruções também estão comentadas no próprio `.env.example`)*.
+   * Registre um **App Web** nas configurações do projeto Firebase e copie `.env.example` para `.env` (`Copy-Item .env.example .env` no Windows PowerShell ou `cp .env.example .env` no macOS/Linux). Preencha as 7 chaves `EXPO_PUBLIC_FIREBASE_*` com os dados do SDK do app Web; as instruções também estão comentadas no `.env.example`.
+   * **Importante:** nunca substitua os valores do `.env.example` pelos valores reais nem envie `.env` ao GitHub. As variáveis `EXPO_PUBLIC_*` são incorporadas ao aplicativo e podem ser vistas por quem o instala; não são segredos. Proteja o Firebase com regras de segurança adequadas e nunca coloque senhas administrativas, chaves privadas ou credenciais de servidor nessas variáveis.
 
 3. **Execute o aplicativo:**
    ```bash
    npx expo start -c
    ```
-   Escaneie o QR Code no **Expo Go** ou pressione `w` para abrir na Web. *(Para build de APK Android via EAS, utilize `apk-build/GERAR_APK.bat` com as mesmas variáveis `EXPO_PUBLIC_FIREBASE_*` configuradas no `expo.dev`.)*
+   Escaneie o QR Code no **Expo Go** ou pressione `w` para abrir na Web. Se alterar o `.env`, reinicie o Expo para carregar as novas variáveis. *(Para build de APK Android via EAS, utilize `apk-build/GERAR_APK.bat` com as mesmas variáveis `EXPO_PUBLIC_FIREBASE_*` configuradas no `expo.dev`.)*
 
 ---
 
